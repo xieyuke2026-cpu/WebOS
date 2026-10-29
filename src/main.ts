@@ -5,6 +5,7 @@ import { WindowManager } from './core/window';
 import { evaluate } from './core/calc';
 import { execCommand, type TermState } from './core/terminal';
 import { validateBackup, makeBackup } from './core/backup';
+import { renderMarkdown } from './core/markdown';
 import { idbSave, idbLoad } from './core/idb';
 import type { Settings, Note, CalEvent } from './types';
 
@@ -14,16 +15,17 @@ function uid(){ return Math.random().toString(36).slice(2,9)+Date.now().toString
 
 interface AppDef{ id:string; name:string; icon:string; desc:string; version:string; caps:string[]; render:(body:HTMLElement,ctx:any)=>void; }
 let vfs=new VFS();
-let settings:Settings={theme:'system',wallpaper:'default',fontScale:1,dockPosition:'bottom'};
+let settings:Settings={theme:'system',wallpaper:'default',fontScale:1,dockPosition:'bottom',desktopIcons:true};
 let notes:Note[]=[{id:uid(),title:'欢迎便笺',body:'WebOS 便笺会自动保存，刷新后恢复。',tags:['welcome'],updatedAt:Date.now()}];
 let events:CalEvent[]=[];
+let todos:import('./types').TodoItem[]=[];
 let installed=new Set<string>();
 const wm=new WindowManager();
 let termState:TermState={cwd:'/home/user'};
 const appEl=document.getElementById('app')!;
 
-async function persist(){ try{ const data=JSON.stringify({vfs:vfs.serialize(),settings,notes,events,installed:[...installed],wins:wm.wins}); await idbSave('webos-state-v1',data);}catch{} }
-async function restore(){ try{ const raw=await idbLoad('webos-state-v1'); if(!raw) return; const d=JSON.parse(raw); if(d.vfs) vfs=VFS.deserialize(d.vfs); if(d.settings) settings=d.settings; if(d.notes) notes=d.notes; if(d.events) events=d.events; if(d.installed) d.installed.forEach((x:string)=>installed.add(x)); }catch{} }
+async function persist(){ try{ const data=JSON.stringify({vfs:vfs.serialize(),settings,notes,events,todos,installed:[...installed],wins:wm.wins}); await idbSave('webos-state-v1',data);}catch{} }
+async function restore(){ try{ const raw=await idbLoad('webos-state-v1'); if(!raw) return; const d=JSON.parse(raw); if(d.vfs) vfs=VFS.deserialize(d.vfs); if(d.settings) settings=d.settings; if(d.notes) notes=d.notes; if(d.events) events=d.events; if(d.todos) todos=d.todos; if(d.installed) d.installed.forEach((x:string)=>installed.add(x)); }catch{} }
 function toast(msg:string){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3200); }
 function notify(msg:string){ toast(msg); const n=JSON.parse(localStorage.getItem('webos-notifs')||'[]'); n.unshift({msg,at:Date.now()}); localStorage.setItem('webos-notifs',JSON.stringify(n.slice(0,30))); }
 export const WALLPAPERS:{id:string;name:string;cls?:string;url?:string}[]=[
@@ -38,13 +40,27 @@ export const WALLPAPERS:{id:string;name:string;cls?:string;url?:string}[]=[
  {id:'photo-nebula',name:'星云 (图)',url:'https://img.goodfon.com/wallpaper/nbig/6/5e/galaxy-stars-light-nebula.webp'},
  {id:'photo-sunrise',name:'山湖日出 (图)',url:'https://onlyhdwallpapers.com/mountain-lake-at-sunrise-154-thumbnail.jpg?v=1786348311'},
 ];
-interface Acct{ name:string }
+interface Acct{ name:string; passHash?:string }
+function hashPw(s:string){ let h=5381; for(let i=0;i<s.length;i++) h=((h<<5)+h+s.charCodeAt(i))|0; return 'h'+(h>>>0).toString(16); }
 function getAcct():Acct{ try{ const a=JSON.parse(localStorage.getItem('webos-account')||'null'); if(a&&a.name) return a; }catch{} return {name:'Ryan'}; }
 function setAcct(a:Acct){ localStorage.setItem('webos-account', JSON.stringify(a)); }
 function isLoggedIn(){ return localStorage.getItem('webos-loggedin')==='1'; }
 function showBoot(){ const b=document.createElement('div'); b.className='boot'; b.innerHTML='<div class="logo">W</div><div style="font-size:22px;font-weight:600">WebOS</div><div class="barwrap"><div class="bar"></div></div><div style="opacity:.75;font-size:13px">正在启动系统…</div>'; document.body.appendChild(b); }
-function showLogin(){ if(document.querySelector('.login')) return; const acct=getAcct(); const d=document.createElement('div'); d.className='login'; d.innerHTML=`<div class="card"><div class="avatar">${esc(acct.name.slice(0,1).toUpperCase()||'W')}</div><h2 style="margin:6px 0">${esc(acct.name)}</h2><p class="muted">模拟账户 · 本机登录, 不连接真实服务</p><input type="password" data-a="pw" placeholder="密码 (模拟登录: 任意输入, 也可留空)"><div class="row" style="justify-content:center;margin-top:12px"><button class="btn primary" data-a="go">登录</button><button class="btn" data-a="guest">访客进入</button></div></div>`; document.body.appendChild(d); const enter=(mode:string)=>{ localStorage.setItem('webos-loggedin','1'); toast('欢迎, '+acct.name+(mode==='guest'?' (访客模式)':'')); d.remove(); }; d.querySelector('[data-a="go"]')!.addEventListener('click',()=>enter('user')); d.querySelector('[data-a="guest"]')!.addEventListener('click',()=>enter('guest')); (d.querySelector('[data-a="pw"]') as HTMLInputElement).addEventListener('keydown',(e)=>{ if(e.key==='Enter') enter('user'); }); (d.querySelector('[data-a="pw"]') as HTMLInputElement).focus(); }
+function showLogin(){ if(document.querySelector('.login')) return; const d=document.createElement('div'); d.className='login'; document.body.appendChild(d);
+  const drawLogin=(err='')=>{ const acct=getAcct(); d.innerHTML=`<div class="card"><div class="avatar">${esc(acct.name.slice(0,1).toUpperCase()||'W')}</div><h2 style="margin:6px 0">${esc(acct.name)}</h2><p class="muted">模拟账户 · 本机登录, 不连接真实服务</p><input type="password" data-a="pw" placeholder="密码${acct.passHash?'':' (尚未设置密码: 任意输入或留空)'}"><p class="muted" data-a="err" style="color:#dc2626;min-height:18px">${esc(err)}</p><div class="row" style="justify-content:center"><button class="btn primary" data-a="go">登录</button><button class="btn" data-a="guest">访客进入</button><button class="btn" data-a="reg">注册新账户</button></div></div>`;
+    const enter=(mode:string)=>{ localStorage.setItem('webos-loggedin','1'); toast('欢迎, '+getAcct().name+(mode==='guest'?' (访客模式)':'')); d.remove(); };
+    d.querySelector('[data-a="go"]')!.addEventListener('click',()=>{ const pw=(d.querySelector('[data-a="pw"]') as HTMLInputElement).value; const acct2=getAcct(); if(acct2.passHash && hashPw(pw)!==acct2.passHash){ drawLogin('密码不正确, 请重试 (或用访客进入)'); return; } enter('user'); });
+    d.querySelector('[data-a="guest"]')!.addEventListener('click',()=>enter('guest'));
+    d.querySelector('[data-a="reg"]')!.addEventListener('click',()=>drawRegister());
+    (d.querySelector('[data-a="pw"]') as HTMLInputElement).addEventListener('keydown',(e)=>{ if(e.key==='Enter') (d.querySelector('[data-a="go"]') as HTMLElement).click(); });
+    (d.querySelector('[data-a="pw"]') as HTMLInputElement).focus(); };
+  const drawRegister=(err='')=>{ d.innerHTML=`<div class="card"><div class="avatar">+</div><h2 style="margin:6px 0">注册模拟账户</h2><p class="muted">账户只保存在这台设备的浏览器里, 密码仅存本机哈希, 不上传。</p><input data-a="rn" placeholder="用户名" style="margin-bottom:8px"><input type="password" data-a="rp" placeholder="设置密码" style="margin-bottom:8px"><input type="password" data-a="rp2" placeholder="再输入一次密码"><p class="muted" style="color:#dc2626;min-height:18px">${esc(err)}</p><div class="row" style="justify-content:center"><button class="btn primary" data-a="do">注册并登录</button><button class="btn" data-a="back">返回登录</button></div></div>`;
+    d.querySelector('[data-a="back"]')!.addEventListener('click',()=>drawLogin());
+    d.querySelector('[data-a="do"]')!.addEventListener('click',()=>{ const name=(d.querySelector('[data-a="rn"]') as HTMLInputElement).value.trim(); const pw=(d.querySelector('[data-a="rp"]') as HTMLInputElement).value; const pw2=(d.querySelector('[data-a="rp2"]') as HTMLInputElement).value; if(!name) return drawRegister('用户名不能为空'); if(pw.length<3) return drawRegister('密码至少 3 位 (模拟账户, 别用真实密码)'); if(pw!==pw2) return drawRegister('两次密码不一致'); setAcct({name, passHash:hashPw(pw)}); localStorage.setItem('webos-loggedin','1'); toast('注册成功, 欢迎 '+name); d.remove(); const ab=$('#acctBtn'); if(ab) ab.textContent='👤 '+name; });
+    (d.querySelector('[data-a="rn"]') as HTMLInputElement).focus(); };
+  drawLogin(); }
 function logout(){ localStorage.removeItem('webos-loggedin'); showLogin(); }
+
 function applyTheme(){ const dark=settings.theme==='dark'||(settings.theme==='system'&&matchMedia('(prefers-color-scheme: dark)').matches); document.documentElement.dataset.theme=dark?'dark':'light'; document.documentElement.style.fontSize=(16*settings.fontScale)+'px'; const d=$('.desktop'); if(d){ const wp=WALLPAPERS.find(w=>w.id===settings.wallpaper)||WALLPAPERS[0]; d.className='desktop '+(wp.cls||''); d.style.backgroundImage=wp.url? 'url("'+wp.url+'")':''; } const dock=$('.dock'); if(dock) dock.classList.toggle('left',settings.dockPosition==='left'); }
 
 const APPS:AppDef[]=[
@@ -56,14 +72,18 @@ const APPS:AppDef[]=[
  {id:'calendar',name:'日历',icon:'📅',desc:'本地日历（未连接外部账户）',version:'1.0.0',caps:['storage'],render:renderCalendar},
  {id:'settings',name:'设置',icon:'⚙️',desc:'主题、壁纸、备份恢复、存储信息',version:'1.0.0',caps:['settings'],render:renderSettings},
  {id:'tasks',name:'任务管理',icon:'📊',desc:'查看运行中的窗口并切换/关闭',version:'1.0.0',caps:[],render:renderTasks},
+ {id:'clock',name:'时钟',icon:'🕐',desc:'本地时钟、世界时钟、秒表与倒计时',version:'1.2.0',caps:[],render:renderClock},
+ {id:'todo',name:'待办',icon:'✅',desc:'待办清单, 自动保存, 可导出到文件',version:'1.2.0',caps:['storage'],render:renderTodo},
+ {id:'paint',name:'画板',icon:'🎨',desc:'SVG 画板, 作品可保存到虚拟文件系统',version:'1.2.0',caps:['vfs.write'],render:renderPaint},
+ {id:'music',name:'音乐',icon:'🎵',desc:'WebAudio 合成钢琴, 可弹奏与播放旋律',version:'1.2.0',caps:[],render:renderMusic},
+ {id:'snake',name:'贪吃蛇',icon:'🐍',desc:'经典贪吃蛇小游戏, 支持触控按钮',version:'1.2.0',caps:[],render:renderSnake},
+ {id:'weather',name:'天气',icon:'🌤️',desc:'天气界面演示 (本地模拟数据, 未连接天气服务)',version:'1.2.0',caps:[],render:renderWeather},
  {id:'store',name:'应用中心',icon:'🛍️',desc:'已安装应用目录，可安装/卸载扩展应用',version:'1.0.0',caps:[],render:renderStore},
 ];
 APPS.forEach(a=>installed.add(a.id));
-// extra installable app
-const EXTRA:AppDef={id:'clock',name:'时钟',icon:'🕐',desc:'世界时钟小应用（可安装）',version:'1.0.0',caps:[],render:(b)=>{ b.innerHTML='<h2>时钟</h2><p style="font-size:32px" id="ck"></p>'; const f=()=>{ const e=b.querySelector('#ck'); if(e) e.textContent=new Date().toLocaleTimeString(); }; f(); setInterval(f,1000); }};
 
 function openApp(appId:string, arg?:any){
-  const app=[...APPS,EXTRA].find(a=>a.id===appId); if(!app) return;
+  const app=APPS.find(a=>a.id===appId); if(!app) return;
   if(!installed.has(appId)){ toast('请先在应用中心安装 '+app.name); return; }
   const existing=wm.findByApp(appId);
   if(existing){ wm.focus(existing.id); syncWins(); const exEl=document.querySelector(`[data-win="${existing.id}"]`) as HTMLElement|null; if(exEl){ exEl.classList.remove('flash'); void exEl.offsetWidth; exEl.classList.add('flash'); if(arg?.path) renderWindow(existing,app,arg); } return; }
@@ -115,17 +135,25 @@ function renderFiles(body:HTMLElement,ctx:any){
 function download(name:string,content:string,mime='text/plain'){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type:mime})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); }
 
 function renderEditor(body:HTMLElement,ctx:any){
-  let path=ctx.arg?.path||''; let dirty=false;
-  body.innerHTML=`<div class="row"><input data-a="path" placeholder="/home/user/file.txt" value="${esc(path)}" style="flex:1"><button class="btn" data-a="open">打开</button><button class="btn primary" data-a="save">保存</button><button class="btn" data-a="exp">导出</button></div><div class="row" style="margin:8px 0"><input data-a="find" placeholder="在文档中搜索"><span class="muted" data-a="findres"></span></div><textarea data-a="ta" style="height:320px;font-family:ui-monospace,monospace" placeholder="在此输入文本 / Markdown..."></textarea><p class="muted" data-a="st"></p>`;
-  const ta=body.querySelector('[data-a="ta"]') as HTMLTextAreaElement; const st=body.querySelector('[data-a="st"]')!;
-  const load=(p:string)=>{ try{ ta.value=vfs.readFile(p); path=p; dirty=false; st.textContent='已打开 '+p; }catch(e:any){ alert(e.message); } };
-  if(path) load(path);
-  ta.addEventListener('input',()=>{ dirty=true; st.textContent='未保存的修改 *'; });
-  body.querySelector('[data-a="open"]')!.addEventListener('click',()=>{ if(dirty && !confirm('有未保存修改，仍要打开其他文件？')) return; load((body.querySelector('[data-a="path"]') as HTMLInputElement).value); });
-  body.querySelector('[data-a="save"]')!.addEventListener('click',()=>{ const p=(body.querySelector('[data-a="path"]') as HTMLInputElement).value||path; if(!p){alert('请输入文件路径');return;} vfs.writeFile(p,ta.value); path=p; dirty=false; st.textContent='已保存 '+new Date().toLocaleTimeString(); persist(); });
-  body.querySelector('[data-a="exp"]')!.addEventListener('click',()=>download(path.split('/').pop()||'untitled.txt',ta.value));
-  body.querySelector('[data-a="find"]')!.addEventListener('input',(e)=>{ const q=(e.target as HTMLInputElement).value; const res=body.querySelector('[data-a="findres"]')!; res.textContent=q? (ta.value.split(q).length-1)+' 处匹配':''; });
+  let path=ctx.arg?.path||''; let dirty=false; let autoT:any=null;
+  body.innerHTML=`<div class="ed-wrap"><aside class="ed-side"><b>文件</b><ul class="list" data-a="flist" style="margin-top:8px"></ul><button class="btn" data-a="refresh" style="width:100%">刷新列表</button></aside><div class="ed-main"><div class="row"><input data-a="path" placeholder="文件名, 如 /home/user/文档.md" value="${esc(path)}" style="flex:1;min-width:140px"><button class="btn" data-a="new">新建</button><button class="btn primary" data-a="save">保存 Ctrl+S</button><button class="btn" data-a="saveas">另存为</button><button class="btn" data-a="exp">导出</button></div><div class="row" style="margin:6px 0"><label><input type="checkbox" data-a="md" style="width:auto"> Markdown 预览</label><label><input type="checkbox" data-a="autosave" style="width:auto"> 自动保存</label><input data-a="find" placeholder="在文档中搜索" style="flex:1;min-width:120px"><span class="muted" data-a="findres"></span></div><div class="ed-edit"><textarea data-a="ta" placeholder="在此输入文本 / Markdown... (# 标题, **粗体**, - 列表)"></textarea><div class="md-preview" data-a="prev" style="display:none"></div></div><p class="muted" data-a="st"></p></div></div>`;
+  const ta=body.querySelector('[data-a="ta"]') as HTMLTextAreaElement; const st=body.querySelector('[data-a="st"]')!; const pathInp=body.querySelector('[data-a="path"]') as HTMLInputElement; const prev=body.querySelector('[data-a="prev"]') as HTMLElement;
+  const updPrev=()=>{ if((body.querySelector('[data-a="md"]') as HTMLInputElement).checked){ prev.style.display='block'; prev.innerHTML=renderMarkdown(ta.value); } else prev.style.display='none'; };
+  const fileList=()=>{ const files=vfs.search('').filter(n=>n.type==='file'); (body.querySelector('[data-a="flist"]')!).innerHTML=files.map(n=>`<li style="padding:6px"><button class="btn" data-f="${esc(vfs.pathOf(n))}" style="width:100%;text-align:left">${esc(vfs.pathOf(n).replace('/home/user/','~/'))}</button></li>`).join('')||'<li class="muted">暂无文件</li>'; body.querySelectorAll('[data-f]').forEach(b=>b.addEventListener('click',()=>load((b as HTMLElement).dataset.f!))); };
+  const load=(p2:string)=>{ if(dirty && !confirm('当前文件有未保存修改, 仍要打开 '+p2+' ?')) return; try{ ta.value=vfs.readFile(p2); path=p2; pathInp.value=p2; dirty=false; st.textContent='已打开 '+p2; updPrev(); }catch(e:any){ alert(e.message); } };
+  const save=(quiet=false)=>{ const p2=pathInp.value.trim()||path; if(!p2){ alert('请先在文件名框输入路径, 如 /home/user/新文档.md'); pathInp.focus(); return; } try{ vfs.writeFile(p2,ta.value); path=p2; dirty=false; st.textContent='已保存 '+p2+' · '+new Date().toLocaleTimeString(); persist(); fileList(); if(!quiet) toast('已保存'); }catch(e:any){ alert(e.message); } };
+  if(path) load(path); fileList(); updPrev();
+  ta.addEventListener('input',()=>{ dirty=true; st.textContent='未保存的修改 * · '+ta.value.length+' 字'; updPrev(); if((body.querySelector('[data-a="autosave"]') as HTMLInputElement).checked && (pathInp.value.trim()||path)){ clearTimeout(autoT); autoT=setTimeout(()=>save(true),900); } });
+  body.querySelector('[data-a="save"]')!.addEventListener('click',()=>save());
+  body.querySelector('[data-a="saveas"]')!.addEventListener('click',()=>{ const cur=pathInp.value.trim(); const dir=cur? cur.slice(0,cur.lastIndexOf('/')) : '/home/user'; const name=prompt('另存为文件名 (含扩展名)', '未命名.md'); if(!name) return; pathInp.value=dir+'/'+name; save(); });
+  body.querySelector('[data-a="new"]')!.addEventListener('click',()=>{ if(dirty && !confirm('有未保存修改, 仍要新建?')) return; ta.value=''; path=''; pathInp.value='/home/user/未命名.md'; dirty=false; st.textContent='新文件: 在文件名框确认路径后点保存'; ta.focus(); updPrev(); });
+  body.querySelector('[data-a="refresh"]')!.addEventListener('click',fileList);
+  body.querySelector('[data-a="exp"]')!.addEventListener('click',()=>download((pathInp.value.trim()||path).split('/').pop()||'untitled.txt',ta.value));
+  (body.querySelector('[data-a="md"]') as HTMLInputElement).addEventListener('change',updPrev);
+  body.querySelector('[data-a="find"]')!.addEventListener('input',(e)=>{ const q=(e.target as HTMLInputElement).value; (body.querySelector('[data-a="findres"]')!).textContent=q? (ta.value.split(q).length-1)+' 处匹配':''; });
+  body.addEventListener('keydown',(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='s'){ e.preventDefault(); save(); } });
 }
+
 function renderTerminal(body:HTMLElement){
   body.innerHTML=`<div class="term" data-a="out">WebOS Terminal — 输入 help 查看命令。连接的是虚拟文件系统，不是真实系统 Shell。</div><div class="row" style="margin-top:8px"><span data-a="prompt"></span><input data-a="inp" style="flex:1" placeholder="ls / cat welcome.md / echo hi > a.txt"></div>`;
   const out=body.querySelector('[data-a="out"]')!; const inp=body.querySelector('[data-a="inp"]') as HTMLInputElement; const pr=body.querySelector('[data-a="prompt"]')!;
@@ -166,39 +194,120 @@ function renderCalendar(body:HTMLElement){
   }; draw();
 }
 function renderSettings(body:HTMLElement){
-  body.innerHTML=`<h3>主题与外观</h3><div class="row"><label>主题 <select data-a="theme"><option value="light">浅色</option><option value="dark">深色</option><option value="system">跟随系统</option></select></label><label>壁纸 <select data-a="wp">${WALLPAPERS.map(w=>`<option value="${w.id}">${w.name}</option>`).join('')}</select></label><label>字体缩放 <select data-a="fs"><option value="0.9">小</option><option value="1">标准</option><option value="1.15">大</option></select></label><label>Dock <select data-a="dock"><option value="bottom">底部</option><option value="left">左侧</option></select></label></div>
-  <h3>账户 (模拟)</h3><div class="row"><div class="avatar" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700">${esc(getAcct().name.slice(0,1).toUpperCase()||'W')}</div><div style="flex:1;min-width:180px"><input data-a="acctname" value="${esc(getAcct().name)}" aria-label="显示名"></div><button class="btn" data-a="acctsave">保存名称</button><button class="btn" data-a="logout">退出登录</button></div><p class="muted">这是本机模拟账户, 不连接任何真实服务, 不上传数据。锁屏后用任意密码即可重新登录, 也可访客进入。</p>
+  body.innerHTML=`<h3>主题与外观</h3><div class="row"><label>主题 <select data-a="theme"><option value="light">浅色</option><option value="dark">深色</option><option value="system">跟随系统</option></select></label><label>壁纸 <select data-a="wp">${WALLPAPERS.map(w=>`<option value="${w.id}">${w.name}</option>`).join('')}</select></label><label>字体缩放 <select data-a="fs"><option value="0.9">小</option><option value="1">标准</option><option value="1.15">大</option></select></label><label>Dock <select data-a="dock"><option value="bottom">底部</option><option value="left">左侧</option></select></label><label>桌面图标 <select data-a="dicons"><option value="1">显示</option><option value="0">隐藏</option></select></label></div>
+  <h3>账户 (模拟)</h3><div class="row"><div class="avatar" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700">${esc(getAcct().name.slice(0,1).toUpperCase()||'W')}</div><div style="flex:1;min-width:180px"><input data-a="acctname" value="${esc(getAcct().name)}" aria-label="显示名"></div><button class="btn" data-a="acctsave">保存名称</button><button class="btn" data-a="logout">退出登录</button></div><p class="muted">这是本机模拟账户, 不连接任何真实服务, 不上传数据。锁屏后: 已设置密码时需输入该密码, 未设置时任意输入可登录, 也可访客进入。</p><div class="row"><input type="password" data-a="acctpw" placeholder="设置/修改登录密码 (模拟, 仅存本机哈希)" style="flex:1;min-width:180px"><button class="btn" data-a="acctpwbtn">保存密码</button></div>
   <h3>壁纸预览</h3><div class="wpgrid">${WALLPAPERS.map(w=>`<button data-wp="${w.id}" class="${settings.wallpaper===w.id?'sel':''}" style="background:${w.url? 'url('+w.url+') center/cover' : w.cls==='wp-sunset'?'linear-gradient(160deg,#7c2d12,#db2777)':w.cls==='wp-forest'?'linear-gradient(160deg,#14532d,#16a34a)':w.cls==='wp-slate'?'linear-gradient(160deg,#0f172a,#334155)':w.cls==='wp-rose'?'linear-gradient(160deg,#881337,#e11d48)':w.cls==='wp-violet'?'linear-gradient(160deg,#2e1065,#7c3aed)':w.cls==='wp-teal'?'linear-gradient(160deg,#042f2e,#0d9488)':'linear-gradient(160deg,#1e3a8a,#2563eb)'}">${w.name}</button>`).join('')}</div>
   <h3>存储</h3><p>虚拟文件总大小：${vfs.totalSize()} 字节 · 文件节点：${vfs.nodes.size} · 便笺：${notes.length} · 日历事件：${events.length}</p>
   <h3>备份与恢复</h3><div class="row"><button class="btn primary" data-a="backup">导出完整备份 JSON</button><label class="btn">恢复备份<input type="file" hidden data-a="restore" accept=".json"></label><button class="btn" data-a="reset">恢复默认设置</button></div>
   <h3>快捷键</h3><p class="muted">Ctrl/Cmd+K 全局搜索 · Ctrl/Cmd+, 设置 · Esc 关闭菜单/启动器</p>
-  <h3>关于</h3><p>WebOS 1.1.0 — 浏览器虚拟操作系统，纯静态、零后端。数据保存在本机 IndexedDB，不会默认上传。</p>`;
+  <h3>关于</h3><p>WebOS 1.2.0 — 浏览器虚拟操作系统，纯静态、零后端。数据保存在本机 IndexedDB，不会默认上传。</p>`;
   const th=body.querySelector('[data-a="theme"]') as HTMLSelectElement; th.value=settings.theme; th.addEventListener('change',()=>{settings.theme=th.value as any; applyTheme(); persist();});
   const wp=body.querySelector('[data-a="wp"]') as HTMLSelectElement; wp.value=settings.wallpaper; wp.addEventListener('change',()=>{settings.wallpaper=wp.value; applyTheme(); persist();});
   const fs=body.querySelector('[data-a="fs"]') as HTMLSelectElement; fs.value=String(settings.fontScale); fs.addEventListener('change',()=>{settings.fontScale=parseFloat(fs.value); applyTheme(); persist();});
   const dk=body.querySelector('[data-a="dock"]') as HTMLSelectElement; dk.value=settings.dockPosition; dk.addEventListener('change',()=>{settings.dockPosition=dk.value as any; applyTheme(); persist();});
-  body.querySelector('[data-a="backup"]')!.addEventListener('click',()=>{ const bk=makeBackup({vfs:vfs.serialize(),settings,notes,events}); download('webos-backup.json',JSON.stringify(bk,null,2),'application/json'); });
-  const rs=body.querySelector('[data-a="restore"]') as HTMLInputElement; rs.addEventListener('change',async()=>{ const f=rs.files?.[0]; if(!f) return; try{ const txt=await f.text(); const obj=JSON.parse(txt); if(!validateBackup(obj)) throw new Error('备份格式无效或过大'); if(!confirm('恢复将覆盖当前数据，确定继续？')) return; vfs=VFS.deserialize(obj.vfs); settings=obj.settings; notes=obj.notes; events=obj.events; applyTheme(); persist(); toast('恢复成功'); }catch(e:any){ alert('恢复失败，原数据未改动：'+e.message); } });
+  const di=body.querySelector('[data-a="dicons"]') as HTMLSelectElement; di.value=settings.desktopIcons===false?'0':'1'; di.addEventListener('change',()=>{ settings.desktopIcons=di.value==='1'; persist(); renderDeskIcons(); });
+  body.querySelector('[data-a="backup"]')!.addEventListener('click',()=>{ const bk=makeBackup({vfs:vfs.serialize(),settings,notes,events,todos}); download('webos-backup.json',JSON.stringify(bk,null,2),'application/json'); });
+  const rs=body.querySelector('[data-a="restore"]') as HTMLInputElement; rs.addEventListener('change',async()=>{ const f=rs.files?.[0]; if(!f) return; try{ const txt=await f.text(); const obj=JSON.parse(txt); if(!validateBackup(obj)) throw new Error('备份格式无效或过大'); if(!confirm('恢复将覆盖当前数据，确定继续？')) return; vfs=VFS.deserialize(obj.vfs); settings=obj.settings; notes=obj.notes; events=obj.events; if(obj.todos) todos=obj.todos; applyTheme(); persist(); toast('恢复成功'); }catch(e:any){ alert('恢复失败，原数据未改动：'+e.message); } });
   body.querySelectorAll('[data-wp]').forEach(b=>b.addEventListener('click',()=>{ settings.wallpaper=(b as HTMLElement).dataset.wp!; applyTheme(); persist(); renderSettings(body); }));
   body.querySelector('[data-a="acctsave"]')!.addEventListener('click',()=>{ const v=(body.querySelector('[data-a="acctname"]') as HTMLInputElement).value.trim(); if(v){ setAcct({name:v}); toast('账户名称已更新 (下次锁屏/登录生效)'); } });
   body.querySelector('[data-a="logout"]')!.addEventListener('click',()=>logout());
-  body.querySelector('[data-a="reset"]')!.addEventListener('click',()=>{ if(confirm('恢复默认设置？')){ settings={theme:'system',wallpaper:'default',fontScale:1,dockPosition:'bottom'}; applyTheme(); persist(); renderSettings(body); } });
+  body.querySelector('[data-a="acctpwbtn"]')!.addEventListener('click',()=>{ const v=(body.querySelector('[data-a="acctpw"]') as HTMLInputElement).value; if(v.length<3){ alert('密码至少 3 位'); return; } const a=getAcct(); a.passHash=hashPw(v); setAcct(a); toast('登录密码已保存 (本机模拟)'); });
+  body.querySelector('[data-a="reset"]')!.addEventListener('click',()=>{ if(confirm('恢复默认设置？')){ settings={theme:'system',wallpaper:'default',fontScale:1,dockPosition:'bottom',desktopIcons:true}; applyTheme(); persist(); renderSettings(body); } });
 }
 function renderTasks(body:HTMLElement,ctx:any){ const draw=()=>{ body.innerHTML= wm.wins.length? `<ul class="list">${wm.wins.map(w=>`<li><b>${esc(w.title)}</b><span class="muted">${w.appId} · ${w.minimized?'最小化':'可见'} · ${w.w}x${w.h}</span><button class="btn" data-f="${w.id}">切换到</button><button class="btn" data-c="${w.id}">关闭</button></li>`).join('')}</ul>`:'<p>当前没有运行中的应用。</p>';
   body.querySelectorAll('[data-f]').forEach(b=>b.addEventListener('click',()=>{ wm.focus((b as HTMLElement).dataset.f!); syncWins(); }));
   body.querySelectorAll('[data-c]').forEach(b=>b.addEventListener('click',()=>{ const id=(b as HTMLElement).dataset.c!; wm.close(id); document.querySelector(`[data-win="${id}"]`)?.remove(); syncDock(); draw(); }));
  }; draw(); }
-function renderStore(body:HTMLElement){ const all=[...APPS,EXTRA]; body.innerHTML=`<ul class="list">${all.map(a=>`<li><span style="font-size:22px">${a.icon}</span><div style="flex:1"><b>${esc(a.name)}</b> <span class="muted">v${a.version}</span><br><span class="muted">${esc(a.desc)} · 能力：${a.caps.join(', ')||'无'}</span></div>${installed.has(a.id)?`<button class="btn" data-open="${a.id}">打开</button>${a.id==='clock'?`<button class="btn" data-un="${a.id}">卸载</button>`:''}`:`<button class="btn primary" data-in="${a.id}">安装</button>`}</li>`).join('')}</ul><p class="muted">首版应用包来自本地目录，不联网下载；架构预留了清单/能力字段供扩展。</p>`;
+function renderStore(body:HTMLElement){ const all=APPS; body.innerHTML=`<ul class="list">${all.map(a=>`<li><span style="font-size:22px">${a.icon}</span><div style="flex:1"><b>${esc(a.name)}</b> <span class="muted">v${a.version}</span><br><span class="muted">${esc(a.desc)} · 能力：${a.caps.join(', ')||'无'}</span></div>${installed.has(a.id)?`<button class="btn" data-open="${a.id}">打开</button>${a.id==='clock-legacy'?`<button class="btn" data-un="${a.id}">卸载</button>`:''}`:`<button class="btn primary" data-in="${a.id}">安装</button>`}</li>`).join('')}</ul><p class="muted">首版应用包来自本地目录，不联网下载；架构预留了清单/能力字段供扩展。</p>`;
   body.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>openApp((b as HTMLElement).dataset.open!)));
-  body.querySelectorAll('[data-in]').forEach(b=>b.addEventListener('click',()=>{ installed.add((b as HTMLElement).dataset.in!); persist(); renderStore(body); toast('安装成功'); }));
-  body.querySelectorAll('[data-un]').forEach(b=>b.addEventListener('click',()=>{ installed.delete((b as HTMLElement).dataset.un!); persist(); renderStore(body); }));
+  body.querySelectorAll('[data-in]').forEach(b=>b.addEventListener('click',()=>{ installed.add((b as HTMLElement).dataset.in!); persist(); renderStore(body); renderDeskIcons(); toast('安装成功'); }));
+  body.querySelectorAll('[data-un]').forEach(b=>b.addEventListener('click',()=>{ installed.delete((b as HTMLElement).dataset.un!); persist(); renderStore(body); renderDeskIcons(); }));
+}
+
+
+function renderClock(body:HTMLElement){
+  body.innerHTML=`<div class="row"><button class="btn" data-tab="now">时钟</button><button class="btn" data-tab="world">世界时钟</button><button class="btn" data-tab="sw">秒表</button><button class="btn" data-tab="timer">倒计时</button></div><div data-a="pane" style="margin-top:14px"></div>`;
+  const pane=body.querySelector('[data-a="pane"]') as HTMLElement; let iv:any=null; const clear=()=>{ if(iv){ clearInterval(iv); iv=null; } };
+  const show=(tab:string)=>{ clear();
+    if(tab==='now'){ pane.innerHTML=`<p style="font-size:42px;margin:10px 0" data-a="big"></p><p class="muted" data-a="date"></p>`; const f=()=>{ const n=new Date(); (pane.querySelector('[data-a="big"]')!).textContent=n.toLocaleTimeString(); (pane.querySelector('[data-a="date"]')!).textContent=n.toLocaleDateString()+' '+['周日','周一','周二','周三','周四','周五','周六'][n.getDay()]; }; f(); iv=setInterval(f,500); }
+    if(tab==='world'){ const cities:[string,string][]=[['北京','Asia/Shanghai'],['东京','Asia/Tokyo'],['伦敦','Europe/London'],['纽约','America/New_York'],['洛杉矶','America/Los_Angeles'],['悉尼','Australia/Sydney']]; pane.innerHTML=cities.map(c=>`<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0"><b>${c[0]}</b><span data-city="${c[1]}"></span></div>`).join(''); const f=()=>{ pane.querySelectorAll('[data-city]').forEach(el=>{ try{ el.textContent=new Date().toLocaleTimeString('zh-CN',{timeZone:(el as HTMLElement).dataset.city}); }catch{ el.textContent='—'; } }); }; f(); iv=setInterval(f,1000); }
+    if(tab==='sw'){ let start=0, elapsed=0, run=false; const laps:string[]=[]; pane.innerHTML=`<p style="font-size:36px" data-a="disp">00:00.0</p><div class="row"><button class="btn primary" data-a="tg">开始</button><button class="btn" data-a="lap">计次</button><button class="btn" data-a="rst">重置</button></div><ul class="list" data-a="laps" style="margin-top:10px"></ul>`; const disp=pane.querySelector('[data-a="disp"]')!; const fmt=(ms:number)=>{ const m=Math.floor(ms/60000), s=Math.floor(ms/1000)%60, d=Math.floor(ms/100)%10; return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')+'.'+d; }; iv=setInterval(()=>{ if(run) disp.textContent=fmt(elapsed+Date.now()-start); },100);
+      pane.querySelector('[data-a="tg"]')!.addEventListener('click',(e)=>{ if(!run){ start=Date.now(); run=true; (e.target as HTMLElement).textContent='暂停'; } else { elapsed+=Date.now()-start; run=false; (e.target as HTMLElement).textContent='继续'; } });
+      pane.querySelector('[data-a="lap"]')!.addEventListener('click',()=>{ laps.unshift(fmt(elapsed+(run?Date.now()-start:0))); (pane.querySelector('[data-a="laps"]')!).innerHTML=laps.map((l,i)=>`<li>第 ${laps.length-i} 次 · ${l}</li>`).join(''); });
+      pane.querySelector('[data-a="rst"]')!.addEventListener('click',()=>{ run=false; elapsed=0; laps.length=0; disp.textContent='00:00.0'; (pane.querySelector('[data-a="laps"]')!).innerHTML=''; (pane.querySelector('[data-a="tg"]') as HTMLElement).textContent='开始'; }); }
+    if(tab==='timer'){ pane.innerHTML=`<div class="row"><input type="number" data-a="min" value="5" min="0" style="width:90px"> 分钟 <input type="number" data-a="sec" value="0" min="0" max="59" style="width:90px"> 秒</div><p style="font-size:36px" data-a="disp">05:00</p><div class="row"><button class="btn primary" data-a="tg">开始倒计时</button><button class="btn" data-a="rst">重置</button></div>`; let remain=300, run=false, last=0; const disp=pane.querySelector('[data-a="disp"]')!; const fmt=()=>{ disp.textContent=String(Math.floor(remain/60)).padStart(2,'0')+':'+String(remain%60).padStart(2,'0'); }; fmt();
+      iv=setInterval(()=>{ if(!run) return; const now=Date.now(); if(now-last>=1000){ last=now; remain--; fmt(); if(remain<=0){ run=false; remain=0; fmt(); notify('倒计时结束!'); alert('⏰ 倒计时结束!'); (pane.querySelector('[data-a="tg"]') as HTMLElement).textContent='开始倒计时'; } } },200);
+      pane.querySelector('[data-a="tg"]')!.addEventListener('click',(e)=>{ if(!run){ if(remain<=0){ remain=(parseInt((pane.querySelector('[data-a="min"]') as HTMLInputElement).value)||0)*60+(parseInt((pane.querySelector('[data-a="sec"]') as HTMLInputElement).value)||0); } last=Date.now(); run=true; (e.target as HTMLElement).textContent='暂停'; fmt(); } else { run=false; (e.target as HTMLElement).textContent='继续'; } });
+      pane.querySelector('[data-a="rst"]')!.addEventListener('click',()=>{ run=false; remain=(parseInt((pane.querySelector('[data-a="min"]') as HTMLInputElement).value)||0)*60+(parseInt((pane.querySelector('[data-a="sec"]') as HTMLInputElement).value)||0); fmt(); (pane.querySelector('[data-a="tg"]') as HTMLElement).textContent='开始倒计时'; }); }
+  };
+  body.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>show((b as HTMLElement).dataset.tab!)));
+  show('now');
+}
+function renderTodo(body:HTMLElement){
+  const draw=(filter='all')=>{ const list=todos.filter(x=>filter==='all'||(filter==='open'?!x.done:x.done));
+    body.innerHTML=`<div class="row"><input data-a="inp" placeholder="输入待办, 回车添加" style="flex:1"><button class="btn primary" data-a="add">添加</button></div><div class="row" style="margin:8px 0"><button class="btn" data-f="all">全部 ${todos.length}</button><button class="btn" data-f="open">未完成 ${todos.filter(x=>!x.done).length}</button><button class="btn" data-f="done">已完成</button><button class="btn" data-a="exp">导出到文件</button><button class="btn" data-a="clear">清除已完成</button></div><ul class="list">${list.map(x=>`<li><input type="checkbox" data-tg="${x.id}" ${x.done?'checked':''} style="width:auto"><span style="flex:1;${x.done?'text-decoration:line-through':''}">${esc(x.text)}</span><button class="btn" data-del="${x.id}">删除</button></li>`).join('')||'<li class="muted">暂无待办</li>'}</ul>`;
+    const add=()=>{ const inp=body.querySelector('[data-a="inp"]') as HTMLInputElement; const v=inp.value.trim(); if(!v) return; todos.unshift({id:uid(),text:v,done:false,createdAt:Date.now()}); persist(); draw(filter); };
+    body.querySelector('[data-a="add"]')!.addEventListener('click',add);
+    (body.querySelector('[data-a="inp"]') as HTMLInputElement).addEventListener('keydown',(e)=>{ if(e.key==='Enter') add(); });
+    body.querySelectorAll('[data-f]').forEach(b=>b.addEventListener('click',()=>draw((b as HTMLElement).dataset.f!)));
+    body.querySelectorAll('[data-tg]').forEach(c=>c.addEventListener('change',()=>{ const x=todos.find(y=>y.id===(c as HTMLElement).dataset.tg); if(x){ x.done=(c as HTMLInputElement).checked; persist(); draw(filter); } }));
+    body.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>{ todos=todos.filter(y=>y.id!==(b as HTMLElement).dataset.del); persist(); draw(filter); }));
+    body.querySelector('[data-a="clear"]')!.addEventListener('click',()=>{ todos=todos.filter(x=>!x.done); persist(); draw(filter); });
+    body.querySelector('[data-a="exp"]')!.addEventListener('click',()=>{ const md='# 待办清单\n\n'+todos.map(x=>`- [${x.done?'x':' '}] ${x.text}`).join('\n'); vfs.writeFile('/home/user/todo.md',md); persist(); toast('已导出到 /home/user/todo.md'); });
+  }; draw();
+}
+function renderPaint(body:HTMLElement){
+  let color='#2563eb', width=4, drawing=false, cur:any=null; const paths:{d:string;c:string;w:number}[]=[];
+  body.innerHTML=`<div class="row">${['#2563eb','#dc2626','#16a34a','#f59e0b','#7c3aed','#0f172a'].map(c=>`<button class="btn" data-c="${c}" style="background:${c};width:38px;min-width:38px" aria-label="颜色"></button>`).join('')}<label>粗细 <input type="range" data-a="w" min="1" max="16" value="4" style="width:110px"></label><button class="btn" data-a="undo">撤销</button><button class="btn" data-a="clear">清空</button><button class="btn primary" data-a="save">保存到文件</button><button class="btn" data-a="exp">导出 SVG</button></div><svg data-a="cv" style="width:100%;height:340px;background:#fff;border:1px solid var(--border);border-radius:10px;touch-action:none;margin-top:8px"></svg><p class="muted">在白色区域拖动绘画。作品以 SVG 文本保存进虚拟文件系统, 可在文件管理器里看到。</p>`;
+  const svg=body.querySelector('[data-a="cv"]') as unknown as SVGSVGElement;
+  const redraw=()=>{ svg.innerHTML=paths.map(p=>`<path d="${p.d}" stroke="${p.c}" stroke-width="${p.w}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`).join(''); };
+  const pt=(e:PointerEvent)=>{ const r=svg.getBoundingClientRect(); return {x:Math.round((e.clientX-r.left)/r.width*600), y:Math.round((e.clientY-r.top)/r.height*340)}; };
+  svg.addEventListener('pointerdown',(e)=>{ drawing=true; const p0=pt(e); cur={d:`M ${p0.x} ${p0.y}`,c:color,w:width}; paths.push(cur); redraw(); });
+  svg.addEventListener('pointermove',(e)=>{ if(!drawing||!cur) return; const p0=pt(e); cur.d+=` L ${p0.x} ${p0.y}`; redraw(); });
+  addEventListener('pointerup',()=>{ drawing=false; cur=null; });
+  svg.setAttribute('viewBox','0 0 600 340');
+  body.querySelectorAll('[data-c]').forEach(b=>b.addEventListener('click',()=>{ color=(b as HTMLElement).dataset.c!; }));
+  (body.querySelector('[data-a="w"]') as HTMLInputElement).addEventListener('input',(e)=>{ width=parseInt((e.target as HTMLInputElement).value)||4; });
+  body.querySelector('[data-a="undo"]')!.addEventListener('click',()=>{ paths.pop(); redraw(); });
+  body.querySelector('[data-a="clear"]')!.addEventListener('click',()=>{ paths.length=0; redraw(); });
+  const svgText=()=>`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340" width="600" height="340"><rect width="600" height="340" fill="white"/>${paths.map(p=>`<path d="${p.d}" stroke="${p.c}" stroke-width="${p.w}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`).join('')}</svg>`;
+  body.querySelector('[data-a="save"]')!.addEventListener('click',()=>{ vfs.writeFile('/home/user/drawing.svg',svgText()); persist(); toast('已保存到 /home/user/drawing.svg'); });
+  body.querySelector('[data-a="exp"]')!.addEventListener('click',()=>download('drawing.svg',svgText(),'image/svg+xml'));
+}
+function renderMusic(body:HTMLElement){
+  let ctxA:AudioContext|null=null; const NOTES:[string,number][]=[['C4',261.63],['D4',293.66],['E4',329.63],['F4',349.23],['G4',392],['A4',440],['B4',493.88],['C5',523.25]];
+  body.innerHTML=`<p class="muted">WebAudio 实时合成的声音, 不是录音文件。点琴键发声, 或播放演示旋律《小星星》。</p><div class="row">${NOTES.map(n=>`<button class="btn" data-n="${n[1]}" style="height:90px;min-width:46px">${n[0]}</button>`).join('')}</div><div class="row" style="margin-top:10px"><button class="btn primary" data-a="play">▶ 播放《小星星》</button><button class="btn" data-a="stop">停止</button></div>`;
+  let timers:any[]=[]; const tone=(f:number,at=0,dur=0.35)=>{ try{ ctxA=ctxA||new AudioContext(); const o=ctxA.createOscillator(); const g=ctxA.createGain(); o.type='triangle'; o.frequency.value=f; g.gain.setValueAtTime(0.22,ctxA.currentTime+at); g.gain.exponentialRampToValueAtTime(0.001,ctxA.currentTime+at+dur); o.connect(g); g.connect(ctxA.destination); o.start(ctxA.currentTime+at); o.stop(ctxA.currentTime+at+dur+0.05); }catch{} };
+  body.querySelectorAll('[data-n]').forEach(b=>b.addEventListener('click',()=>tone(parseFloat((b as HTMLElement).dataset.n!))));
+  body.querySelector('[data-a="play"]')!.addEventListener('click',()=>{ const melody:[string,number][]=[['C4',1],['C4',1],['G4',1],['G4',1],['A4',1],['A4',1],['G4',2],['F4',1],['F4',1],['E4',1],['E4',1],['D4',1],['D4',1],['C4',2]]; let t=0; for(const [n,b] of melody){ const f=NOTES.find(x=>x[0]===n)![1]; const id=setTimeout(()=>tone(f,0,b*0.32),t*320); timers.push(id); t+=b; } });
+  body.querySelector('[data-a="stop"]')!.addEventListener('click',()=>{ timers.forEach(clearTimeout); timers=[]; });
+}
+function renderSnake(body:HTMLElement){
+  const N=15, CELL=20; let snake=[{x:7,y:7}], dir={x:1,y:0}, food={x:11,y:7}, score=0, iv:any=null, dead=false;
+  body.innerHTML=`<div class="row"><button class="btn primary" data-a="start">开始 / 重新开始</button><span>得分: <b data-a="score">0</b></span><span class="muted">方向键 / WASD / 触控按钮</span></div><canvas data-a="cv" width="300" height="300" style="background:#0f172a;border-radius:10px;margin-top:8px;max-width:100%"></canvas><div class="row" style="justify-content:center;margin-top:6px"><button class="btn" data-d="0,-1">↑</button></div><div class="row" style="justify-content:center"><button class="btn" data-d="-1,0">←</button><button class="btn" data-d="0,1">↓</button><button class="btn" data-d="1,0">→</button></div>`;
+  const cv=body.querySelector('[data-a="cv"]') as HTMLCanvasElement; const g=cv.getContext('2d')!;
+  const draw=()=>{ g.fillStyle='#0f172a'; g.fillRect(0,0,300,300); g.fillStyle='#f43f5e'; g.fillRect(food.x*CELL+2,food.y*CELL+2,CELL-4,CELL-4); snake.forEach((s,i)=>{ g.fillStyle=i===0?'#4ade80':'#22c55e'; g.fillRect(s.x*CELL+1,s.y*CELL+1,CELL-2,CELL-2); }); if(dead){ g.fillStyle='#fff'; g.font='20px sans-serif'; g.fillText('游戏结束! 得分 '+score,70,150); } };
+  const step=()=>{ const head={x:snake[0].x+dir.x, y:snake[0].y+dir.y}; if(head.x<0||head.y<0||head.x>=N||head.y>=N||snake.some(s=>s.x===head.x&&s.y===head.y)){ dead=true; if(iv) clearInterval(iv); draw(); return; } snake.unshift(head); if(head.x===food.x&&head.y===food.y){ score+=10; (body.querySelector('[data-a="score"]')!).textContent=String(score); do{ food={x:Math.floor(Math.random()*N),y:Math.floor(Math.random()*N)}; }while(snake.some(s=>s.x===food.x&&s.y===food.y)); } else snake.pop(); draw(); };
+  body.querySelector('[data-a="start"]')!.addEventListener('click',()=>{ snake=[{x:7,y:7}]; dir={x:1,y:0}; score=0; dead=false; (body.querySelector('[data-a="score"]')!).textContent='0'; if(iv) clearInterval(iv); iv=setInterval(step,140); draw(); cv.focus(); });
+  body.querySelectorAll('[data-d]').forEach(b=>b.addEventListener('click',()=>{ const [x,y]=(b as HTMLElement).dataset.d!.split(',').map(Number); if(!(dir.x===-x&&dir.y===-y)) dir={x,y}; }));
+  cv.tabIndex=0; cv.addEventListener('keydown',(e)=>{ const map:Record<string,[number,number]>={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]}; const m=map[e.key]; if(m){ e.preventDefault(); if(!(dir.x===-m[0]&&dir.y===-m[1])) dir={x:m[0],y:m[1]}; } });
+  draw();
+}
+function renderWeather(body:HTMLElement){
+  const CITIES=['北京','上海','广州','深圳','成都'];
+  const draw=(city:string)=>{ const seedBase=city.split('').reduce((a,c)=>a+c.charCodeAt(0),0); const day=Math.floor(Date.now()/86400000); const conds=['晴','多云','晴','阴','小雨','多云','晴间多云']; const mk=(off:number)=>{ const s=seedBase+day+off*7; const cond=conds[Math.abs(s)%conds.length]; const hi=18+Math.abs(s*3)%14; const lo=hi-6-Math.abs(s)%4; return {cond,hi,lo}; };
+    const today=mk(0); const days=['今天','明天','后天','第4天','第5天'].map((d,i)=>({d,...mk(i)}));
+    body.innerHTML=`<div class="row">${CITIES.map(c=>`<button class="btn" data-city="${c}" ${c===city?'style="border-color:var(--accent)"':''}>${c}</button>`).join('')}</div><div style="text-align:center;padding:16px 0"><div style="font-size:44px">${today.cond==='小雨'?'🌧️':today.cond==='阴'?'☁️':today.cond==='多云'||today.cond==='晴间多云'?'⛅':'☀️'}</div><b style="font-size:22px">${city} · ${today.cond}</b><p style="font-size:30px;margin:6px">${today.lo}° ~ ${today.hi}°</p></div><ul class="list">${days.map(x=>`<li><span style="flex:1">${x.d}</span><span>${x.cond}</span><b>${x.lo}° ~ ${x.hi}°</b></li>`).join('')}</ul><p class="muted">演示数据: 由日期在本地生成的模拟天气, 未连接任何天气服务, 请勿据此安排出行。</p>`;
+    body.querySelectorAll('[data-city]').forEach(b=>b.addEventListener('click',()=>draw((b as HTMLElement).dataset.city!))); };
+  draw('北京');
 }
 
 function shell(){
-  appEl.innerHTML=`<header class="topbar"><button id="launcherBtn" aria-label="启动器">⊞ WebOS</button><button id="searchBtn">🔍 搜索 (Ctrl+K)</button><span style="flex:1"></span><span id="clock"></span><button id="acctBtn">👤</button><button id="lockBtn" aria-label="锁定">🔒</button><button id="notifBtn" aria-label="通知">🔔</button><button id="offline" class="muted" style="display:none">离线</button></header><main class="desktop"><div class="dock">${APPS.map(a=>`<button data-app="${a.id}"><span class="ic">${a.icon}</span>${a.name}<span class="dot"></span></button>`).join('')}</div></main>`;
+  appEl.innerHTML=`<header class="topbar"><button id="launcherBtn" aria-label="启动器">⊞ WebOS</button><button id="searchBtn">🔍 搜索 (Ctrl+K)</button><span style="flex:1"></span><span id="clock"></span><button id="acctBtn">👤</button><button id="lockBtn" aria-label="锁定">🔒</button><button id="notifBtn" aria-label="通知">🔔</button><button id="offline" class="muted" style="display:none">离线</button></header><main class="desktop"><div class="deskicons"></div><div class="dock">${APPS.map(a=>`<button data-app="${a.id}"><span class="ic">${a.icon}</span>${a.name}<span class="dot"></span></button>`).join('')}</div></main>`;
   applyTheme();
   const clock=()=>{ const e=$('#clock'); if(e) e.textContent=new Date().toLocaleString(); }; clock(); setInterval(clock,1000);
   document.querySelectorAll('.dock button').forEach(b=>b.addEventListener('click',()=>openApp((b as HTMLElement).dataset.app!)));
+  renderDeskIcons();
   const ab=$('#acctBtn'); if(ab){ ab.textContent='👤 '+getAcct().name; ab.addEventListener('click',()=>openApp('settings')); }
   const lk=$('#lockBtn'); if(lk) lk.addEventListener('click',()=>logout());
   $('#launcherBtn')!.addEventListener('click',(e)=>{ e.stopPropagation(); if(document.querySelector('.launcher')){ document.querySelectorAll('.launcher').forEach(x=>x.remove()); } else showLauncher(); });
@@ -210,6 +319,9 @@ function shell(){
   addEventListener('offline',()=>{ ($('#offline') as HTMLElement).style.display='inline'; toast('当前离线，WebOS 核心功能仍可使用'); });
   addEventListener('keydown',(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); showSearch(); } if((e.metaKey||e.ctrlKey)&&e.key===','){ e.preventDefault(); openApp('settings'); } if(e.key==='Escape'){ document.querySelectorAll('.launcher,.searchbox,.ctx').forEach(x=>x.remove()); } });
 }
+function iconPos(id:string, idx:number){ try{ const m=JSON.parse(localStorage.getItem('webos-deskicons')||'{}'); if(m[id]) return m[id]; }catch{} return {x:14+(Math.floor(idx/5)*94), y:14+(idx%5)*98}; }
+function saveIconPos(id:string,x:number,y:number){ try{ const m=JSON.parse(localStorage.getItem('webos-deskicons')||'{}'); m[id]={x,y}; localStorage.setItem('webos-deskicons',JSON.stringify(m)); }catch{} }
+function renderDeskIcons(){ const layer=$('.deskicons'); if(!layer) return; if(settings.desktopIcons===false){ layer.innerHTML=''; return; } layer.innerHTML=APPS.filter(a=>installed.has(a.id)).map((a,i)=>{ const pp=iconPos(a.id,i); return `<button class="deskicon" data-app="${a.id}" style="left:${pp.x}px;top:${pp.y}px"><span>${a.icon}</span>${a.name}</button>`; }).join(''); layer.querySelectorAll('[data-app]').forEach(btn=>{ const el=btn as HTMLElement; let sx=0,sy=0,ox=0,oy=0,moved=false; el.addEventListener('pointerdown',(e)=>{ sx=e.clientX; sy=e.clientY; ox=parseInt(el.style.left)||0; oy=parseInt(el.style.top)||0; moved=false; const mv=(ev:PointerEvent)=>{ const dx=ev.clientX-sx, dy=ev.clientY-sy; if(Math.abs(dx)+Math.abs(dy)>6) moved=true; if(moved){ el.style.left=Math.max(0,ox+dx)+'px'; el.style.top=Math.max(0,oy+dy)+'px'; } }; const up=()=>{ removeEventListener('pointermove',mv); removeEventListener('pointerup',up); if(moved) saveIconPos(el.dataset.app!, parseInt(el.style.left)||0, parseInt(el.style.top)||0); else openApp(el.dataset.app!); }; addEventListener('pointermove',mv); addEventListener('pointerup',up); }); }); }
 function showCtx(x:number,y:number){ document.querySelectorAll('.ctx').forEach(e=>e.remove()); const c=document.createElement('div'); c.className='ctx'; c.style.left=Math.min(x,innerWidth-180)+'px'; c.style.top=Math.min(y,innerHeight-180)+'px'; c.innerHTML=`<button data-a="files">打开文件管理器</button><button data-a="new">新建文件 welcome-note.txt</button><button data-a="wp">切换壁纸</button><button data-a="settings">设置</button>`; document.body.appendChild(c); c.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ const a=(b as HTMLElement).dataset.a; c.remove(); if(a==='files') openApp('files'); if(a==='settings') openApp('settings'); if(a==='wp'){ settings.wallpaper=settings.wallpaper==='default'?'sunset':'default'; applyTheme(); persist(); } if(a==='new'){ vfs.createFile('/home/user/welcome-note.txt','Created from desktop menu'); persist(); toast('已创建文件'); } })); setTimeout(()=>addEventListener('click',()=>c.remove(),{once:true}),0); }
 function showLauncher(){ document.querySelectorAll('.launcher,.searchbox').forEach(e=>e.remove()); const d=document.createElement('div'); d.className='launcher'; d.innerHTML=`<div class="row" style="justify-content:space-between"><h3 style="margin:4px 0 10px">应用启动器</h3><button class="btn" data-a="x">✕ 关闭</button></div><div class="grid">${APPS.filter(a=>installed.has(a.id)).map(a=>`<button data-app="${a.id}"><div style="font-size:26px">${a.icon}</div>${a.name}</button>`).join('')}</div>`; $('.desktop')!.appendChild(d); d.querySelector('[data-a="x"]')!.addEventListener('click',()=>d.remove()); d.querySelectorAll('[data-app]').forEach(b=>b.addEventListener('click',()=>{ d.remove(); openApp((b as HTMLElement).dataset.app!); })); }
 function showSearch(){ document.querySelectorAll('.launcher,.searchbox').forEach(e=>e.remove()); const d=document.createElement('div'); d.className='searchbox'; d.innerHTML=`<input placeholder="搜索应用、文件、便笺..." autofocus><ul class="list" style="margin-top:10px"></ul>`; $('.desktop')!.appendChild(d); const inp=d.querySelector('input')!; const list=d.querySelector('.list')!;
