@@ -6,6 +6,9 @@ import { evaluate } from './core/calc';
 import { execCommand, type TermState } from './core/terminal';
 import { validateBackup, makeBackup } from './core/backup';
 import { renderMarkdown } from './core/markdown';
+import type { DeskItem } from './core/desktop';
+import { seedItems, visibleItems, addShortcut, hideItem, unhideAll, renameItem, retargetItem, removeItem, removeAppItems, isCoreApp, appItem, LONG_PRESS_MS } from './core/desktop';
+const DOCK_IDS=['files','editor','terminal','notes','calendar','settings','tasks','store'];
 import { idbSave, idbLoad } from './core/idb';
 import type { Settings, Note, CalEvent } from './types';
 
@@ -194,34 +197,33 @@ function renderCalendar(body:HTMLElement){
   }; draw();
 }
 function renderSettings(body:HTMLElement){
-  body.innerHTML=`<h3>主题与外观</h3><div class="row"><label>主题 <select data-a="theme"><option value="light">浅色</option><option value="dark">深色</option><option value="system">跟随系统</option></select></label><label>壁纸 <select data-a="wp">${WALLPAPERS.map(w=>`<option value="${w.id}">${w.name}</option>`).join('')}</select></label><label>字体缩放 <select data-a="fs"><option value="0.9">小</option><option value="1">标准</option><option value="1.15">大</option></select></label><label>Dock <select data-a="dock"><option value="bottom">底部</option><option value="left">左侧</option></select></label><label>桌面图标 <select data-a="dicons"><option value="1">显示</option><option value="0">隐藏</option></select></label></div>
-  <h3>账户 (模拟)</h3><div class="row"><div class="avatar" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700">${esc(getAcct().name.slice(0,1).toUpperCase()||'W')}</div><div style="flex:1;min-width:180px"><input data-a="acctname" value="${esc(getAcct().name)}" aria-label="显示名"></div><button class="btn" data-a="acctsave">保存名称</button><button class="btn" data-a="logout">退出登录</button></div><p class="muted">这是本机模拟账户, 不连接任何真实服务, 不上传数据。锁屏后: 已设置密码时需输入该密码, 未设置时任意输入可登录, 也可访客进入。</p><div class="row"><input type="password" data-a="acctpw" placeholder="设置/修改登录密码 (模拟, 仅存本机哈希)" style="flex:1;min-width:180px"><button class="btn" data-a="acctpwbtn">保存密码</button></div>
-  <h3>壁纸预览</h3><div class="wpgrid">${WALLPAPERS.map(w=>`<button data-wp="${w.id}" class="${settings.wallpaper===w.id?'sel':''}" style="background:${w.url? 'url('+w.url+') center/cover' : w.cls==='wp-sunset'?'linear-gradient(160deg,#7c2d12,#db2777)':w.cls==='wp-forest'?'linear-gradient(160deg,#14532d,#16a34a)':w.cls==='wp-slate'?'linear-gradient(160deg,#0f172a,#334155)':w.cls==='wp-rose'?'linear-gradient(160deg,#881337,#e11d48)':w.cls==='wp-violet'?'linear-gradient(160deg,#2e1065,#7c3aed)':w.cls==='wp-teal'?'linear-gradient(160deg,#042f2e,#0d9488)':'linear-gradient(160deg,#1e3a8a,#2563eb)'}">${w.name}</button>`).join('')}</div>
-  <h3>存储</h3><p>虚拟文件总大小：${vfs.totalSize()} 字节 · 文件节点：${vfs.nodes.size} · 便笺：${notes.length} · 日历事件：${events.length}</p>
-  <h3>备份与恢复</h3><div class="row"><button class="btn primary" data-a="backup">导出完整备份 JSON</button><label class="btn">恢复备份<input type="file" hidden data-a="restore" accept=".json"></label><button class="btn" data-a="reset">恢复默认设置</button></div>
-  <h3>快捷键</h3><p class="muted">Ctrl/Cmd+K 全局搜索 · Ctrl/Cmd+, 设置 · Esc 关闭菜单/启动器</p>
-  <h3>关于</h3><p>WebOS 1.2.0 — 浏览器虚拟操作系统，纯静态、零后端。数据保存在本机 IndexedDB，不会默认上传。</p>`;
+  body.innerHTML=`<div class="setgrid">
+  <section class="setcard"><h3>账户 (模拟)</h3><div class="row"><div class="avatar" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700">${esc(getAcct().name.slice(0,1).toUpperCase()||'W')}</div><div style="flex:1;min-width:160px"><input data-a="acctname" value="${esc(getAcct().name)}" aria-label="显示名"></div><button class="btn" data-a="acctsave">保存名称</button><button class="btn" data-a="logout">退出登录</button></div><div class="row" style="margin-top:8px"><input type="password" data-a="acctpw" placeholder="设置/修改登录密码 (模拟, 仅存本机哈希)" style="flex:1;min-width:180px"><button class="btn" data-a="acctpwbtn">保存密码</button></div><p class="muted">本机模拟账户, 不连接真实服务, 不上传数据。锁屏后: 已设密码需输入该密码, 未设密码任意输入可登录, 也可访客进入。</p></section>
+  <section class="setcard"><h3>外观</h3><div class="row"><label>主题 <select data-a="theme"><option value="light">浅色</option><option value="dark">深色</option><option value="system">跟随系统</option></select></label><label>字体缩放 <select data-a="fs"><option value="0.9">小</option><option value="1">标准</option><option value="1.15">大</option></select></label><label>Dock 位置 <select data-a="dock"><option value="bottom">底部</option><option value="left">左侧</option></select></label></div><label style="display:block;margin-top:8px">壁纸 <select data-a="wp">${WALLPAPERS.map(w=>`<option value="${w.id}">${w.name}</option>`).join('')}</select></label><div class="wpgrid" style="margin-top:8px">${WALLPAPERS.map(w=>`<button data-wp="${w.id}" class="${settings.wallpaper===w.id?'sel':''}" style="background:${w.url? 'url('+w.url+') center/cover' : w.cls==='wp-sunset'?'linear-gradient(160deg,#7c2d12,#db2777)':w.cls==='wp-forest'?'linear-gradient(160deg,#14532d,#16a34a)':w.cls==='wp-slate'?'linear-gradient(160deg,#0f172a,#334155)':w.cls==='wp-rose'?'linear-gradient(160deg,#881337,#e11d48)':w.cls==='wp-violet'?'linear-gradient(160deg,#2e1065,#7c3aed)':w.cls==='wp-teal'?'linear-gradient(160deg,#042f2e,#0d9488)':'linear-gradient(160deg,#1e3a8a,#2563eb)'}">${w.name}</button>`).join('')}</div></section>
+  <section class="setcard"><h3>存储与备份</h3><p>虚拟文件总大小: ${vfs.totalSize()} 字节 · 文件节点: ${vfs.nodes.size} · 便笺: ${notes.length} · 日历事件: ${events.length} · 待办: ${todos.length}</p><div class="row"><button class="btn primary" data-a="backup">导出完整备份 JSON</button><label class="btn">恢复备份<input type="file" hidden data-a="restore" accept=".json"></label><button class="btn" data-a="reset">恢复默认设置</button></div><p class="muted">备份包含虚拟文件、设置、便笺、日历、待办。恢复前会先校验格式, 失败不会覆盖现有数据。</p></section>
+  <section class="setcard"><h3>快捷键与关于</h3><p class="muted">Ctrl/Cmd+K 全局搜索 · Ctrl/Cmd+, 打开设置 · 编辑器 Ctrl/Cmd+S 保存 · Esc 关闭菜单 · 桌面: 单击选中, 双击打开, 长按 0.32 秒打开项目菜单, 按住拖动移动位置; 双击桌面空白处添加文件/文件夹。</p><p>WebOS 1.3.0 — 浏览器虚拟操作系统, 纯静态、零后端。数据保存在本机 IndexedDB, 不会默认上传。</p></section>
+  </div>`;
   const th=body.querySelector('[data-a="theme"]') as HTMLSelectElement; th.value=settings.theme; th.addEventListener('change',()=>{settings.theme=th.value as any; applyTheme(); persist();});
   const wp=body.querySelector('[data-a="wp"]') as HTMLSelectElement; wp.value=settings.wallpaper; wp.addEventListener('change',()=>{settings.wallpaper=wp.value; applyTheme(); persist();});
   const fs=body.querySelector('[data-a="fs"]') as HTMLSelectElement; fs.value=String(settings.fontScale); fs.addEventListener('change',()=>{settings.fontScale=parseFloat(fs.value); applyTheme(); persist();});
   const dk=body.querySelector('[data-a="dock"]') as HTMLSelectElement; dk.value=settings.dockPosition; dk.addEventListener('change',()=>{settings.dockPosition=dk.value as any; applyTheme(); persist();});
-  const di=body.querySelector('[data-a="dicons"]') as HTMLSelectElement; di.value=settings.desktopIcons===false?'0':'1'; di.addEventListener('change',()=>{ settings.desktopIcons=di.value==='1'; persist(); renderDeskIcons(); });
   body.querySelector('[data-a="backup"]')!.addEventListener('click',()=>{ const bk=makeBackup({vfs:vfs.serialize(),settings,notes,events,todos}); download('webos-backup.json',JSON.stringify(bk,null,2),'application/json'); });
-  const rs=body.querySelector('[data-a="restore"]') as HTMLInputElement; rs.addEventListener('change',async()=>{ const f=rs.files?.[0]; if(!f) return; try{ const txt=await f.text(); const obj=JSON.parse(txt); if(!validateBackup(obj)) throw new Error('备份格式无效或过大'); if(!confirm('恢复将覆盖当前数据，确定继续？')) return; vfs=VFS.deserialize(obj.vfs); settings=obj.settings; notes=obj.notes; events=obj.events; if(obj.todos) todos=obj.todos; applyTheme(); persist(); toast('恢复成功'); }catch(e:any){ alert('恢复失败，原数据未改动：'+e.message); } });
+  const rs=body.querySelector('[data-a="restore"]') as HTMLInputElement; rs.addEventListener('change',async()=>{ const f=rs.files?.[0]; if(!f) return; try{ const txt=await f.text(); const obj=JSON.parse(txt); if(!validateBackup(obj)) throw new Error('备份格式无效或过大'); if(!confirm('恢复将覆盖当前数据, 确定继续?')) return; vfs=VFS.deserialize(obj.vfs); settings=obj.settings; notes=obj.notes; events=obj.events; if(obj.todos) todos=obj.todos; applyTheme(); persist(); toast('恢复成功'); }catch(e:any){ alert('恢复失败, 原数据未改动: '+e.message); } });
   body.querySelectorAll('[data-wp]').forEach(b=>b.addEventListener('click',()=>{ settings.wallpaper=(b as HTMLElement).dataset.wp!; applyTheme(); persist(); renderSettings(body); }));
-  body.querySelector('[data-a="acctsave"]')!.addEventListener('click',()=>{ const v=(body.querySelector('[data-a="acctname"]') as HTMLInputElement).value.trim(); if(v){ setAcct({name:v}); toast('账户名称已更新 (下次锁屏/登录生效)'); } });
+  body.querySelector('[data-a="acctsave"]')!.addEventListener('click',()=>{ const v=(body.querySelector('[data-a="acctname"]') as HTMLInputElement).value.trim(); if(v){ setAcct({...getAcct(), name:v}); toast('账户名称已更新'); const ab=$('#acctBtn'); if(ab) ab.textContent='👤 '+v; } });
   body.querySelector('[data-a="logout"]')!.addEventListener('click',()=>logout());
   body.querySelector('[data-a="acctpwbtn"]')!.addEventListener('click',()=>{ const v=(body.querySelector('[data-a="acctpw"]') as HTMLInputElement).value; if(v.length<3){ alert('密码至少 3 位'); return; } const a=getAcct(); a.passHash=hashPw(v); setAcct(a); toast('登录密码已保存 (本机模拟)'); });
-  body.querySelector('[data-a="reset"]')!.addEventListener('click',()=>{ if(confirm('恢复默认设置？')){ settings={theme:'system',wallpaper:'default',fontScale:1,dockPosition:'bottom',desktopIcons:true}; applyTheme(); persist(); renderSettings(body); } });
+  body.querySelector('[data-a="reset"]')!.addEventListener('click',()=>{ if(confirm('恢复默认设置?')){ settings={theme:'system',wallpaper:'default',fontScale:1,dockPosition:'bottom',desktopIcons:true}; applyTheme(); persist(); renderSettings(body); } });
 }
+
 function renderTasks(body:HTMLElement,ctx:any){ const draw=()=>{ body.innerHTML= wm.wins.length? `<ul class="list">${wm.wins.map(w=>`<li><b>${esc(w.title)}</b><span class="muted">${w.appId} · ${w.minimized?'最小化':'可见'} · ${w.w}x${w.h}</span><button class="btn" data-f="${w.id}">切换到</button><button class="btn" data-c="${w.id}">关闭</button></li>`).join('')}</ul>`:'<p>当前没有运行中的应用。</p>';
   body.querySelectorAll('[data-f]').forEach(b=>b.addEventListener('click',()=>{ wm.focus((b as HTMLElement).dataset.f!); syncWins(); }));
   body.querySelectorAll('[data-c]').forEach(b=>b.addEventListener('click',()=>{ const id=(b as HTMLElement).dataset.c!; wm.close(id); document.querySelector(`[data-win="${id}"]`)?.remove(); syncDock(); draw(); }));
  }; draw(); }
-function renderStore(body:HTMLElement){ const all=APPS; body.innerHTML=`<ul class="list">${all.map(a=>`<li><span style="font-size:22px">${a.icon}</span><div style="flex:1"><b>${esc(a.name)}</b> <span class="muted">v${a.version}</span><br><span class="muted">${esc(a.desc)} · 能力：${a.caps.join(', ')||'无'}</span></div>${installed.has(a.id)?`<button class="btn" data-open="${a.id}">打开</button>${a.id==='clock-legacy'?`<button class="btn" data-un="${a.id}">卸载</button>`:''}`:`<button class="btn primary" data-in="${a.id}">安装</button>`}</li>`).join('')}</ul><p class="muted">首版应用包来自本地目录，不联网下载；架构预留了清单/能力字段供扩展。</p>`;
+function renderStore(body:HTMLElement){ const all=APPS; body.innerHTML=`<ul class="list">${all.map(a=>`<li><span style="font-size:22px">${a.icon}</span><div style="flex:1"><b>${esc(a.name)}</b> <span class="muted">v${a.version}</span><br><span class="muted">${esc(a.desc)} · 能力：${a.caps.join(', ')||'无'}</span></div>${installed.has(a.id)?`<button class="btn" data-open="${a.id}">打开</button>${!isCoreApp(a.id)?`<button class="btn" data-un="${a.id}">卸载</button>`:`<span class="muted">系统应用</span>`}`:`<button class="btn primary" data-in="${a.id}">安装</button>`}</li>`).join('')}</ul><p class="muted">首版应用包来自本地目录，不联网下载；架构预留了清单/能力字段供扩展。</p>`;
   body.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>openApp((b as HTMLElement).dataset.open!)));
-  body.querySelectorAll('[data-in]').forEach(b=>b.addEventListener('click',()=>{ installed.add((b as HTMLElement).dataset.in!); persist(); renderStore(body); renderDeskIcons(); toast('安装成功'); }));
-  body.querySelectorAll('[data-un]').forEach(b=>b.addEventListener('click',()=>{ installed.delete((b as HTMLElement).dataset.un!); persist(); renderStore(body); renderDeskIcons(); }));
+  body.querySelectorAll('[data-in]').forEach(b=>b.addEventListener('click',()=>{ const nid=(b as HTMLElement).dataset.in!; installed.add(nid); if(!desk.items.some(i=>i.kind==='app'&&i.ref===nid)){ const na=APPS.find(a=>a.id===nid); if(na) desk.items=[...desk.items, appItem(na)]; saveDesk(); } persist(); renderStore(body); renderDeskIcons(); toast('安装成功'); }));
+  body.querySelectorAll('[data-un]').forEach(b=>b.addEventListener('click',()=>{ uninstallApp((b as HTMLElement).dataset.un!); renderStore(body); }));
 }
 
 
@@ -303,7 +305,7 @@ function renderWeather(body:HTMLElement){
 }
 
 function shell(){
-  appEl.innerHTML=`<header class="topbar"><button id="launcherBtn" aria-label="启动器">⊞ WebOS</button><button id="searchBtn">🔍 搜索 (Ctrl+K)</button><span style="flex:1"></span><span id="clock"></span><button id="acctBtn">👤</button><button id="lockBtn" aria-label="锁定">🔒</button><button id="notifBtn" aria-label="通知">🔔</button><button id="offline" class="muted" style="display:none">离线</button></header><main class="desktop"><div class="deskicons"></div><div class="dock">${APPS.map(a=>`<button data-app="${a.id}"><span class="ic">${a.icon}</span>${a.name}<span class="dot"></span></button>`).join('')}</div></main>`;
+  appEl.innerHTML=`<header class="topbar"><button id="launcherBtn" aria-label="启动器">⊞ WebOS</button><button id="searchBtn">🔍 搜索 (Ctrl+K)</button><span style="flex:1"></span><span id="clock"></span><button id="acctBtn">👤</button><button id="lockBtn" aria-label="锁定">🔒</button><button id="notifBtn" aria-label="通知">🔔</button><button id="offline" class="muted" style="display:none">离线</button></header><main class="desktop"><div class="deskicons"></div><div class="dock">${DOCK_IDS.map(id=>APPS.find(a=>a.id===id)).filter(Boolean).map(a=>`<button data-app="${a!.id}"><span class="ic">${a!.icon}</span>${a!.name}<span class="dot"></span></button>`).join('')}</div></main>`;
   applyTheme();
   const clock=()=>{ const e=$('#clock'); if(e) e.textContent=new Date().toLocaleString(); }; clock(); setInterval(clock,1000);
   document.querySelectorAll('.dock button').forEach(b=>b.addEventListener('click',()=>openApp((b as HTMLElement).dataset.app!)));
@@ -315,14 +317,75 @@ function shell(){
   $('#searchBtn')!.addEventListener('click',showSearch);
   $('#notifBtn')!.addEventListener('click',()=>{ const n=JSON.parse(localStorage.getItem('webos-notifs')||'[]'); alert(n.length? n.map((x:any)=>new Date(x.at).toLocaleString()+' '+x.msg).join('\n'):'暂无通知'); });
   const desk=$('.desktop')!; desk.addEventListener('contextmenu',(e)=>{ e.preventDefault(); showCtx(e.clientX,e.clientY); });
+  desk.addEventListener('dblclick',(e)=>{ const t=e.target as HTMLElement; if(!t.closest('.deskicon,.win,.dock,.launcher,.searchbox,.ctx')) showBlankMenu(e.clientX,e.clientY); });
   addEventListener('online',()=>{ ($('#offline') as HTMLElement).style.display='none'; });
   addEventListener('offline',()=>{ ($('#offline') as HTMLElement).style.display='inline'; toast('当前离线，WebOS 核心功能仍可使用'); });
   addEventListener('keydown',(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); showSearch(); } if((e.metaKey||e.ctrlKey)&&e.key===','){ e.preventDefault(); openApp('settings'); } if(e.key==='Escape'){ document.querySelectorAll('.launcher,.searchbox,.ctx').forEach(x=>x.remove()); } });
 }
-function iconPos(id:string, idx:number){ try{ const m=JSON.parse(localStorage.getItem('webos-deskicons')||'{}'); if(m[id]) return m[id]; }catch{} return {x:14+(Math.floor(idx/5)*94), y:14+(idx%5)*98}; }
-function saveIconPos(id:string,x:number,y:number){ try{ const m=JSON.parse(localStorage.getItem('webos-deskicons')||'{}'); m[id]={x,y}; localStorage.setItem('webos-deskicons',JSON.stringify(m)); }catch{} }
-function renderDeskIcons(){ const layer=$('.deskicons'); if(!layer) return; if(settings.desktopIcons===false){ layer.innerHTML=''; return; } layer.innerHTML=APPS.filter(a=>installed.has(a.id)).map((a,i)=>{ const pp=iconPos(a.id,i); return `<button class="deskicon" data-app="${a.id}" style="left:${pp.x}px;top:${pp.y}px"><span>${a.icon}</span>${a.name}</button>`; }).join(''); layer.querySelectorAll('[data-app]').forEach(btn=>{ const el=btn as HTMLElement; let sx=0,sy=0,ox=0,oy=0,moved=false; el.addEventListener('pointerdown',(e)=>{ sx=e.clientX; sy=e.clientY; ox=parseInt(el.style.left)||0; oy=parseInt(el.style.top)||0; moved=false; const mv=(ev:PointerEvent)=>{ const dx=ev.clientX-sx, dy=ev.clientY-sy; if(Math.abs(dx)+Math.abs(dy)>6) moved=true; if(moved){ el.style.left=Math.max(0,ox+dx)+'px'; el.style.top=Math.max(0,oy+dy)+'px'; } }; const up=()=>{ removeEventListener('pointermove',mv); removeEventListener('pointerup',up); if(moved) saveIconPos(el.dataset.app!, parseInt(el.style.left)||0, parseInt(el.style.top)||0); else openApp(el.dataset.app!); }; addEventListener('pointermove',mv); addEventListener('pointerup',up); }); }); }
-function showCtx(x:number,y:number){ document.querySelectorAll('.ctx').forEach(e=>e.remove()); const c=document.createElement('div'); c.className='ctx'; c.style.left=Math.min(x,innerWidth-180)+'px'; c.style.top=Math.min(y,innerHeight-180)+'px'; c.innerHTML=`<button data-a="files">打开文件管理器</button><button data-a="new">新建文件 welcome-note.txt</button><button data-a="wp">切换壁纸</button><button data-a="settings">设置</button>`; document.body.appendChild(c); c.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ const a=(b as HTMLElement).dataset.a; c.remove(); if(a==='files') openApp('files'); if(a==='settings') openApp('settings'); if(a==='wp'){ settings.wallpaper=settings.wallpaper==='default'?'sunset':'default'; applyTheme(); persist(); } if(a==='new'){ vfs.createFile('/home/user/welcome-note.txt','Created from desktop menu'); persist(); toast('已创建文件'); } })); setTimeout(()=>addEventListener('click',()=>c.remove(),{once:true}),0); }
+interface DeskState{ items:DeskItem[]; pos:Record<string,{x:number;y:number}> }
+function loadDesk():DeskState{ try{ const d=JSON.parse(localStorage.getItem('webos-deskitems-v2')||'null'); if(d&&Array.isArray(d.items)) return d; }catch{} return {items: seedItems(APPS.filter(a=>installed.has(a.id))), pos:{}}; }
+let desk:DeskState=loadDesk();
+function saveDesk(){ try{ localStorage.setItem('webos-deskitems-v2', JSON.stringify(desk)); }catch{} }
+function deskPos(key:string, idx:number){ return desk.pos[key]||{x:14+(Math.floor(idx/5)*94), y:14+(idx%5)*98}; }
+let selectedDeskKey='';
+function closeCtx(){ document.querySelectorAll('.ctx').forEach(x=>x.remove()); }
+function showCtxMenu(x:number, y:number, html:string){ closeCtx(); const c=document.createElement('div'); c.className='ctx'; c.style.left=Math.min(x,innerWidth-210)+'px'; c.style.top=Math.min(y,innerHeight-300)+'px'; c.innerHTML=html; document.body.appendChild(c); return c; }
+function openDeskItem(item:DeskItem){
+  if(item.kind==='app'){ openApp(item.ref); return; }
+  if(item.kind==='shortcut' && !item.ref.startsWith('/')){ openApp(item.ref); return; }
+  const node=vfs.resolve(item.ref);
+  if(item.kind==='folder' || (node&&node.type==='dir')) openApp('files',{path:item.ref});
+  else openApp('editor',{path:item.ref});
+}
+function handleDeskClick(item:DeskItem){ const now=Date.now(); const last=(handleDeskClick as any)._t||0; const lastKey=(handleDeskClick as any)._k||'';
+  if(lastKey===item.key && now-last<350){ (handleDeskClick as any)._t=0; openDeskItem(item); return; }
+  (handleDeskClick as any)._t=now; (handleDeskClick as any)._k=item.key; selectedDeskKey=item.key; renderDeskIcons(); }
+function uninstallApp(appId:string){ if(isCoreApp(appId)){ toast('系统应用不可卸载'); return; } installed.delete(appId); for(const w of [...wm.wins].filter(w=>w.appId===appId)){ wm.close(w.id); document.querySelector(`[data-win="${w.id}"]`)?.remove(); } desk.items=removeAppItems(desk.items,appId); persist(); saveDesk(); syncDock(); renderDeskIcons(); const app=APPS.find(a=>a.id===appId); toast('已卸载 '+(app?app.name:appId)); }
+function showItemMenu(item:DeskItem, x:number, y:number){
+  const isApp=item.kind==='app'; const isSc=item.kind==='shortcut';
+  const canUninstall=(isApp||(isSc&&!item.ref.startsWith('/'))) && !isCoreApp(isApp?item.ref:item.ref);
+  let html=`<button data-m="open">打开</button>`;
+  if(isSc) html+=`<button data-m="del">删除快捷方式</button>`;
+  else if(isApp && canUninstall) html+=`<button data-m="uninstall">卸载</button>`;
+  else if(isApp) html+=`<button data-m="sysapp">系统应用 (不可卸载)</button>`;
+  html+=`<button data-m="rename">重命名</button><button data-m="shortcut">添加快捷方式</button>`;
+  if(item.kind==='file'||item.kind==='folder') html+=`<button data-m="del">删除 (进回收站)</button>`;
+  html+=`<button data-m="hide">在桌面上隐藏</button>`;
+  const c=showCtxMenu(x,y,html);
+  c.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ const m=(b as HTMLElement).dataset.m; closeCtx();
+    if(m==='open') openDeskItem(item);
+    if(m==='sysapp') toast('系统应用不可卸载');
+    if(m==='uninstall') uninstallApp(item.ref);
+    if(m==='del'){ if(isSc){ desk.items=removeItem(desk.items,item.key); } else { try{ vfs.remove(item.ref); persist(); }catch(e:any){ alert(e.message); return; } desk.items=removeItem(desk.items,item.key); } saveDesk(); renderDeskIcons(); }
+    if(m==='rename'){ if(item.kind==='file'||item.kind==='folder'){ const nn=prompt('新名称', item.name); if(nn){ try{ const dir=item.ref.slice(0,item.ref.lastIndexOf('/'))||'/'; vfs.rename(item.ref, nn); desk.items=retargetItem(desk.items, item.key, (dir==='/'?'':dir)+'/'+nn, nn); }catch(e:any){ alert(e.message); return; } persist(); } } else { const nn=prompt('桌面上显示的名称', item.name); if(nn&&nn.trim()) desk.items=renameItem(desk.items, item.key, nn.trim()); } saveDesk(); renderDeskIcons(); }
+    if(m==='shortcut'){ const before=desk.items.length; desk.items=addShortcut(desk.items, item, 'sc:'+uid()); if(desk.items.length===before) toast('已存在同名快捷方式'); else { const sc=desk.items[desk.items.length-1]; desk.pos[sc.key]={x:60,y:60}; toast('已添加快捷方式'); } saveDesk(); renderDeskIcons(); }
+    if(m==='hide'){ desk.items=hideItem(desk.items,item.key); if(selectedDeskKey===item.key) selectedDeskKey=''; saveDesk(); renderDeskIcons(); toast('已在桌面隐藏 (双击桌面空白处可恢复)'); }
+  }));
+}
+function showBlankMenu(x:number, y:number){
+  const hiddenN=desk.items.filter(i=>i.hidden).length;
+  const c=showCtxMenu(x,y,`<button data-m="newfile">添加文件</button><button data-m="newfolder">添加文件夹</button>${hiddenN?`<button data-m="unhide">恢复隐藏的项目 (${hiddenN})</button>`:''}<button data-m="wp">更换壁纸</button>`);
+  c.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ const m=(b as HTMLElement).dataset.m; closeCtx();
+    if(m==='wp'){ openApp('settings'); return; }
+    if(m==='unhide'){ desk.items=unhideAll(desk.items); saveDesk(); renderDeskIcons(); return; }
+    const isFile=m==='newfile'; const name=prompt(isFile?'文件名':'文件夹名', isFile?'新文件.txt':'新文件夹'); if(!name) return;
+    try{ if(!vfs.resolve('/home/user/Desktop')) vfs.mkdir('/home/user/Desktop'); const path='/home/user/Desktop/'+name; if(vfs.resolve(path)){ toast('同名项目已存在'); return; }
+      if(isFile) vfs.createFile(path,''); else vfs.mkdir(path); persist();
+      desk.items=[...desk.items, {key:(isFile?'file:':'folder:')+path, kind:isFile?'file':'folder', ref:path, name, icon:isFile?'📄':'📁'}];
+      desk.pos[(isFile?'file:':'folder:')+path]={x:Math.max(0,x-40), y:Math.max(0,y-60)}; saveDesk(); renderDeskIcons(); toast('已添加到桌面');
+    }catch(e:any){ alert(e.message); }
+  }));
+}
+function renderDeskIcons(){ const layer=$('.deskicons'); if(!layer) return; const vis=visibleItems(desk.items); layer.innerHTML=vis.map((it,i)=>{ const pp=deskPos(it.key,i); return `<button class="deskicon ${selectedDeskKey===it.key?'selected':''}" data-key="${esc(it.key)}"><span>${it.icon}</span>${esc(it.name)}${it.kind==='shortcut'?'<small>快捷方式</small>':''}</button>`; }).join('');
+  layer.querySelectorAll('[data-key]').forEach(btn=>{ const el=btn as HTMLElement; const item=desk.items.find(x2=>x2.key===el.dataset.key); if(!item) return; el.style.left=(deskPos(item.key,0).x)+'px'; const idx=vis.indexOf(item); el.style.left=deskPos(item.key,idx).x+'px'; el.style.top=deskPos(item.key,idx).y+'px';
+    let sx=0,sy=0,ox=0,oy=0,moved=false,longFired=false,timer:any=null;
+    el.addEventListener('pointerdown',(e)=>{ sx=e.clientX; sy=e.clientY; ox=parseInt(el.style.left)||0; oy=parseInt(el.style.top)||0; moved=false; longFired=false; timer=setTimeout(()=>{ longFired=true; showItemMenu(item, e.clientX, e.clientY); }, LONG_PRESS_MS);
+      const mv=(ev:PointerEvent)=>{ if(longFired) return; const dx=ev.clientX-sx, dy=ev.clientY-sy; if(Math.abs(dx)+Math.abs(dy)>6){ moved=true; clearTimeout(timer); } if(moved){ el.style.left=Math.max(0,ox+dx)+'px'; el.style.top=Math.max(0,oy+dy)+'px'; } };
+      const up=()=>{ removeEventListener('pointermove',mv); removeEventListener('pointerup',up); clearTimeout(timer); if(moved){ desk.pos[item.key]={x:parseInt(el.style.left)||0, y:parseInt(el.style.top)||0}; saveDesk(); } else if(!longFired){ handleDeskClick(item); } };
+      addEventListener('pointermove',mv); addEventListener('pointerup',up); });
+  }); }
+function showCtx(x:number,y:number){ showBlankMenu(x,y); }
+
 function showLauncher(){ document.querySelectorAll('.launcher,.searchbox').forEach(e=>e.remove()); const d=document.createElement('div'); d.className='launcher'; d.innerHTML=`<div class="row" style="justify-content:space-between"><h3 style="margin:4px 0 10px">应用启动器</h3><button class="btn" data-a="x">✕ 关闭</button></div><div class="grid">${APPS.filter(a=>installed.has(a.id)).map(a=>`<button data-app="${a.id}"><div style="font-size:26px">${a.icon}</div>${a.name}</button>`).join('')}</div>`; $('.desktop')!.appendChild(d); d.querySelector('[data-a="x"]')!.addEventListener('click',()=>d.remove()); d.querySelectorAll('[data-app]').forEach(b=>b.addEventListener('click',()=>{ d.remove(); openApp((b as HTMLElement).dataset.app!); })); }
 function showSearch(){ document.querySelectorAll('.launcher,.searchbox').forEach(e=>e.remove()); const d=document.createElement('div'); d.className='searchbox'; d.innerHTML=`<input placeholder="搜索应用、文件、便笺..." autofocus><ul class="list" style="margin-top:10px"></ul>`; $('.desktop')!.appendChild(d); const inp=d.querySelector('input')!; const list=d.querySelector('.list')!;
   inp.addEventListener('input',()=>{ const q=(inp as HTMLInputElement).value.trim(); if(!q){list.innerHTML='';return;} const apps=APPS.filter(a=>a.name.includes(q)).map(a=>`<li>应用：${esc(a.name)} <button class="btn" data-open="${a.id}">打开</button></li>`); const files=vfs.search(q).slice(0,8).map(n=>`<li>文件：${esc(vfs.pathOf(n))}</li>`); const ns=notes.filter(n=>n.title.includes(q)||n.body.includes(q)).map(n=>`<li>便笺：${esc(n.title)}</li>`); list.innerHTML=[...apps,...files,...ns].join('')||'<li>无结果</li>'; list.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>{ d.remove(); openApp((b as HTMLElement).dataset.open!); })); }); inp.focus(); }

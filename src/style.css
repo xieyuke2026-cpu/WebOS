@@ -83,3 +83,9 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-
 .md-preview pre code{background:transparent;padding:0}
 .md-preview blockquote{border-left:3px solid var(--accent);margin:8px 0;padding:2px 10px;color:var(--muted)}
 @media (max-width:700px){ .ed-wrap{flex-direction:column} .ed-side{width:100%;max-height:150px} .ed-edit{flex-direction:column} }
+.deskicon.selected{outline:2px solid #fff;outline-offset:1px;background:rgba(37,99,235,.5)}
+.setgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start}
+.setcard{border:1px solid var(--border);border-radius:14px;padding:14px;background:var(--panel)}
+.setcard h3{margin:2px 0 10px}
+.ctx{min-width:180px}
+.ctx button{min-height:40px}
