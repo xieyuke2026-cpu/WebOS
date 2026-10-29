@@ -8,3 +8,8 @@ describe('VFS',()=>{ it('create/read/list',()=>{ const v=new VFS(); v.createFile
  it('serialize roundtrip',()=>{ const v=new VFS(); v.createFile('/home/user/s.txt','42'); const v2=VFS.deserialize(v.serialize()); expect(v2.readFile('/home/user/s.txt')).toBe('42'); });
  it('search and tree',()=>{ const v=new VFS(); expect(v.search('welcome').length).toBeGreaterThan(0); expect(v.tree('/home/user')).toContain('welcome.md'); });
 });
+
+describe('vfs dirs and Desktop seed',()=>{
+  it('seeds a Desktop folder usable as a storage location',()=>{ const v=new VFS(); expect(v.resolve('/home/user/Desktop')?.type).toBe('dir'); v.createFile('/home/user/Desktop/a.txt','hi'); expect(v.list('/home/user/Desktop').length).toBe(1); });
+  it('dirs() lists directories sorted and excludes trash',()=>{ const v=new VFS(); const ds=v.dirs(); expect(ds).toContain('/home/user/Desktop'); expect(ds).toContain('/home/user/Documents'); expect(ds.some(d=>d.includes('.trash'))).toBe(false); expect(ds).toEqual([...ds].sort()); });
+});

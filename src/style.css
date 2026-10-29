@@ -89,3 +89,43 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-
 .setcard h3{margin:2px 0 10px}
 .ctx{min-width:180px}
 .ctx button{min-height:40px}
+/* ===== WebOS 1.4 默认风格: 极光玻璃 Aurora Glass ===== */
+.desktop.wp-moss{background:radial-gradient(120% 90% at 85% 0%,rgba(254,249,195,.5),transparent 50%),radial-gradient(100% 80% at 10% 100%,rgba(190,242,100,.35),transparent 55%),linear-gradient(165deg,#1d3b2a,#3f6212 48%,#65a30d 82%,#a3b86b)}
+.win{border-radius:20px;border:1px solid rgba(255,255,255,.5);box-shadow:0 24px 70px rgba(2,6,23,.38),0 4px 16px rgba(2,6,23,.2)}
+.win header{background:linear-gradient(120deg,rgba(37,99,235,.16),rgba(124,58,237,.16),rgba(219,39,119,.12));backdrop-filter:blur(14px) saturate(160%)}
+.topbar{backdrop-filter:blur(20px) saturate(180%);border-bottom:1px solid rgba(255,255,255,.35)}
+.dock{border-radius:28px;backdrop-filter:blur(24px) saturate(190%);border:1px solid rgba(255,255,255,.55);box-shadow:0 18px 50px rgba(2,6,23,.35);padding:10px 12px}
+.dock button{border-radius:18px;transition:transform .18s cubic-bezier(.34,1.56,.64,1),background .15s}
+.dock button:hover{transform:translateY(-6px) scale(1.07)}
+.ctx,.launcher{backdrop-filter:blur(20px) saturate(180%);border-radius:16px;border:1px solid rgba(255,255,255,.4)}
+.btn.primary{background:linear-gradient(120deg,#2563eb,#7c3aed);border-color:transparent}
+.deskicon{border-radius:18px}
+.deskicon span{filter:drop-shadow(0 4px 8px rgba(0,0,0,.35))}
+/* ===== 访达式文件 ===== */
+.finder{display:flex;height:100%;min-height:0}
+.fside{width:172px;flex:none;border-right:1px solid var(--border);padding:8px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+.fside-t{font-size:12px;color:var(--muted);margin:8px 4px 4px;font-weight:700}
+.fplace{text-align:left;padding:10px;border-radius:10px;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;min-height:42px}
+.fplace.on{background:var(--accent);color:#fff}
+.fmain{flex:1;min-width:0;display:flex;flex-direction:column;padding:4px 10px;overflow:auto}
+.fbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.crumbs{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
+.crumb{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:6px 8px;border-radius:8px;font-weight:600}
+.crumb:hover{background:rgba(127,127,127,.18)}
+.fsearch{margin-left:auto;min-width:120px;flex:0 1 200px}
+.fhead,.frow{display:grid;grid-template-columns:1fr 70px 64px auto;gap:8px;align-items:center;padding:7px 8px}
+.fhead{font-weight:700;color:var(--muted);border-bottom:1px solid var(--border)}
+.frow{border-bottom:1px solid var(--border);border-radius:8px;cursor:pointer}
+.frow.on{background:rgba(37,99,235,.16)}
+.fname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fops{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+@media (max-width:700px){ .fside{width:118px} .fhead,.frow{grid-template-columns:1fr 56px auto} .fhead span:nth-child(3),.frow span:nth-child(3){display:none} }
+/* ===== macOS 式保存面板 ===== */
+.win-body{position:relative}
+.savepanel{position:absolute;inset:0;background:rgba(2,6,23,.48);display:flex;align-items:center;justify-content:center;z-index:60;border-radius:0 0 20px 20px}
+.sp-card{background:var(--panel);color:var(--text);border-radius:18px;padding:18px;width:min(500px,94%);box-shadow:0 24px 60px rgba(0,0,0,.4);max-height:92%;overflow:auto}
+.sp-card h3{margin:0 0 10px;text-align:center}
+.sp-loc{display:flex;flex-direction:column;gap:4px;max-height:230px;overflow:auto;margin:10px 0;border:1px solid var(--border);border-radius:12px;padding:6px}
+.sp-loc button{text-align:left;padding:9px 10px;border-radius:9px;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;min-height:40px}
+.sp-loc button.on{background:var(--accent);color:#fff}
+.sp-loc button.on .muted{color:rgba(255,255,255,.75)}
