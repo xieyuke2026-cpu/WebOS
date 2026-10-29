@@ -1,0 +1,3 @@
+import type { BackupFile } from '../types';
+export function validateBackup(obj:any):obj is BackupFile{ if(!obj||typeof obj!=='object') return false; if(obj.version!==1) return false; if(!obj.vfs||!Array.isArray(obj.vfs.nodes)) return false; if(!obj.settings||typeof obj.settings!=='object') return false; if(!Array.isArray(obj.notes)||!Array.isArray(obj.events)) return false; const s=JSON.stringify(obj); if(s.length>20*1024*1024) return false; return true; }
+export function makeBackup(partial:Omit<BackupFile,'version'|'exportedAt'>):BackupFile{ return {version:1, exportedAt:new Date().toISOString(), ...partial}; }

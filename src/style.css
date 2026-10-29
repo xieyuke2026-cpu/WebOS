@@ -1,0 +1,33 @@
+
+:root{--bg:#e2e8f0;--panel:#ffffff;--text:#0f172a;--muted:#64748b;--accent:#2563eb;--border:#cbd5e1;--radius:12px}
+[data-theme="dark"]{--bg:#0f172a;--panel:#1e293b;--text:#f1f5f9;--muted:#94a3b8;--border:#334155}
+*{box-sizing:border-box} html,body{margin:0;height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text)}
+#app{height:100dvh;display:flex;flex-direction:column;background:var(--bg)}
+.topbar{height:48px;display:flex;align-items:center;gap:12px;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--border);z-index:9999}
+.topbar button,.btn{min-height:40px;min-width:40px;padding:8px 12px;border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:8px;cursor:pointer}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.desktop{flex:1;position:relative;overflow:hidden;background:linear-gradient(160deg,#1e3a8a,#2563eb 55%,#0ea5e9)}
+.desktop.wp-sunset{background:linear-gradient(160deg,#7c2d12,#db2777 55%,#f59e0b)} .desktop.wp-forest{background:linear-gradient(160deg,#14532d,#16a34a 55%,#84cc16)} .desktop.wp-slate{background:linear-gradient(160deg,#0f172a,#334155)}
+.dock{position:absolute;left:50%;transform:translateX(-50%);bottom:12px;display:flex;gap:8px;background:rgba(255,255,255,.92);padding:8px;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.25);z-index:9000}
+.dock.left{left:12px;top:60px;bottom:auto;transform:none;flex-direction:column}
+.dock button{width:52px;height:52px;border-radius:12px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.dock button .dot{width:6px;height:6px;border-radius:50%;background:transparent} .dock button.running .dot{background:var(--accent)}
+.dock button span.ic{font-size:20px}
+.win{position:absolute;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 12px 40px rgba(0,0,0,.28);display:flex;flex-direction:column;overflow:hidden;min-width:280px;min-height:200px}
+.win-head{height:44px;display:flex;align-items:center;gap:8px;padding:0 8px 0 12px;background:var(--panel);border-bottom:1px solid var(--border);cursor:grab;touch-action:none;user-select:none}
+.win-head b{flex:1;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.win-head button{width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--panel);cursor:pointer}
+.win-body{flex:1;overflow:auto;padding:12px}
+.win.minimized{display:none}
+.resize{position:absolute;right:0;bottom:0;width:22px;height:22px;cursor:nwse-resize;touch-action:none}
+.launcher,.searchbox,.notif{position:absolute;left:50%;transform:translateX(-50%);top:56px;width:min(560px,92vw);max-height:70vh;overflow:auto;background:var(--panel);border:1px solid var(--border);border-radius:14px;box-shadow:0 16px 50px rgba(0,0,0,.3);padding:12px;z-index:9500}
+.launcher .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px}
+.launcher .grid button{padding:14px 8px;border-radius:12px;border:1px solid var(--border);background:var(--panel);cursor:pointer}
+input,textarea,select{width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text);font-size:15px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap} .list{list-style:none;padding:0;margin:0} .list li{padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.muted{color:var(--muted);font-size:13px} .term{background:#020617;color:#e2e8f0;font-family:ui-monospace,monospace;padding:10px;border-radius:8px;min-height:260px;white-space:pre-wrap;word-break:break-word}
+.calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px} .calc-grid button{height:52px;font-size:18px}
+.toast{position:fixed;right:12px;bottom:76px;background:#0f172a;color:#fff;padding:10px 14px;border-radius:10px;z-index:10000;max-width:86vw}
+.ctx{position:fixed;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:6px;z-index:10000;box-shadow:0 10px 30px rgba(0,0,0,.25)} .ctx button{display:block;width:100%;text-align:left;padding:10px;border:0;background:transparent;cursor:pointer;color:var(--text)}
+@media (max-width:700px){ .win{border-radius:10px} .dock button{width:46px;height:46px} }
+@media (prefers-reduced-motion:reduce){ *{transition:none!important;animation:none!important} }
