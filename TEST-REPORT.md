@@ -16,3 +16,9 @@
 ## 未验证项
 - iPad Safari 真机手感/软键盘 (需 Ryan 在 iPad 上打开 Pages 地址实测)
 - Service Worker 离线 (需 https 线上环境复核)
+
+## v1.1.0 追加验证 (2026-10-29)
+- Vitest 20/20 通过 (新增: help 分组与单命令用法, WindowManager.findByApp 单实例查找)。
+- 构建成功: JS 42.24KB / CSS 9.30KB。
+- jsdom 烟雾 (tests/jsdom-smoke 流程扩展实测): Boot 出现并自动消失 ✓; 登录页出现且标注模拟账户 ✓; 点登录关闭 ✓; 文件应用点两次只开 1 个窗口 ✓; 终端点两次总数仍 2 ✓; 最后聚焦的终端窗口带 active 高亮 ✓; 每窗口 3 个缩放手柄 ✓; 启动器开关切换 ✓; 点锁屏后登录页重现 ✓。
+- 8 张图片壁纸 URL 逐个 curl 验证 200 + image 类型 (见 docs/WALLPAPERS.md)。

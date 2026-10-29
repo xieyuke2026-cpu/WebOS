@@ -26,7 +26,26 @@ async function persist(){ try{ const data=JSON.stringify({vfs:vfs.serialize(),se
 async function restore(){ try{ const raw=await idbLoad('webos-state-v1'); if(!raw) return; const d=JSON.parse(raw); if(d.vfs) vfs=VFS.deserialize(d.vfs); if(d.settings) settings=d.settings; if(d.notes) notes=d.notes; if(d.events) events=d.events; if(d.installed) d.installed.forEach((x:string)=>installed.add(x)); }catch{} }
 function toast(msg:string){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3200); }
 function notify(msg:string){ toast(msg); const n=JSON.parse(localStorage.getItem('webos-notifs')||'[]'); n.unshift({msg,at:Date.now()}); localStorage.setItem('webos-notifs',JSON.stringify(n.slice(0,30))); }
-function applyTheme(){ const dark=settings.theme==='dark'||(settings.theme==='system'&&matchMedia('(prefers-color-scheme: dark)').matches); document.documentElement.dataset.theme=dark?'dark':'light'; document.documentElement.style.fontSize=(16*settings.fontScale)+'px'; const d=$('.desktop'); if(d){ d.className='desktop '+(settings.wallpaper==='default'?'':settings.wallpaper==='sunset'?'wp-sunset':settings.wallpaper==='forest'?'wp-forest':'wp-slate'); } const dock=$('.dock'); if(dock) dock.classList.toggle('left',settings.dockPosition==='left'); }
+export const WALLPAPERS:{id:string;name:string;cls?:string;url?:string}[]=[
+ {id:'default',name:'深蓝渐变'}, {id:'sunset',name:'日落渐变',cls:'wp-sunset'}, {id:'forest',name:'森林渐变',cls:'wp-forest'},
+ {id:'slate',name:'石板渐变',cls:'wp-slate'}, {id:'rose',name:'玫瑰渐变',cls:'wp-rose'}, {id:'violet',name:'紫霞渐变',cls:'wp-violet'}, {id:'teal',name:'青碧渐变',cls:'wp-teal'},
+ {id:'photo-lake',name:'阿尔卑斯湖 (图)',url:'https://picsum.photos/id/1018/1920/1080'},
+ {id:'photo-river',name:'山间河流 (图)',url:'https://picsum.photos/id/1015/1920/1080'},
+ {id:'photo-canyon',name:'峡谷 (图)',url:'https://picsum.photos/id/1016/1920/1080'},
+ {id:'photo-snow',name:'雪山 (图)',url:'https://picsum.photos/id/1036/1920/1080'},
+ {id:'photo-falls',name:'瀑布 (图)',url:'https://picsum.photos/id/1019/1920/1080'},
+ {id:'photo-moon',name:'月夜 (图)',url:'https://picsum.photos/id/1044/1920/1080'},
+ {id:'photo-nebula',name:'星云 (图)',url:'https://img.goodfon.com/wallpaper/nbig/6/5e/galaxy-stars-light-nebula.webp'},
+ {id:'photo-sunrise',name:'山湖日出 (图)',url:'https://onlyhdwallpapers.com/mountain-lake-at-sunrise-154-thumbnail.jpg?v=1786348311'},
+];
+interface Acct{ name:string }
+function getAcct():Acct{ try{ const a=JSON.parse(localStorage.getItem('webos-account')||'null'); if(a&&a.name) return a; }catch{} return {name:'Ryan'}; }
+function setAcct(a:Acct){ localStorage.setItem('webos-account', JSON.stringify(a)); }
+function isLoggedIn(){ return localStorage.getItem('webos-loggedin')==='1'; }
+function showBoot(){ const b=document.createElement('div'); b.className='boot'; b.innerHTML='<div class="logo">W</div><div style="font-size:22px;font-weight:600">WebOS</div><div class="barwrap"><div class="bar"></div></div><div style="opacity:.75;font-size:13px">正在启动系统…</div>'; document.body.appendChild(b); }
+function showLogin(){ if(document.querySelector('.login')) return; const acct=getAcct(); const d=document.createElement('div'); d.className='login'; d.innerHTML=`<div class="card"><div class="avatar">${esc(acct.name.slice(0,1).toUpperCase()||'W')}</div><h2 style="margin:6px 0">${esc(acct.name)}</h2><p class="muted">模拟账户 · 本机登录, 不连接真实服务</p><input type="password" data-a="pw" placeholder="密码 (模拟登录: 任意输入, 也可留空)"><div class="row" style="justify-content:center;margin-top:12px"><button class="btn primary" data-a="go">登录</button><button class="btn" data-a="guest">访客进入</button></div></div>`; document.body.appendChild(d); const enter=(mode:string)=>{ localStorage.setItem('webos-loggedin','1'); toast('欢迎, '+acct.name+(mode==='guest'?' (访客模式)':'')); d.remove(); }; d.querySelector('[data-a="go"]')!.addEventListener('click',()=>enter('user')); d.querySelector('[data-a="guest"]')!.addEventListener('click',()=>enter('guest')); (d.querySelector('[data-a="pw"]') as HTMLInputElement).addEventListener('keydown',(e)=>{ if(e.key==='Enter') enter('user'); }); (d.querySelector('[data-a="pw"]') as HTMLInputElement).focus(); }
+function logout(){ localStorage.removeItem('webos-loggedin'); showLogin(); }
+function applyTheme(){ const dark=settings.theme==='dark'||(settings.theme==='system'&&matchMedia('(prefers-color-scheme: dark)').matches); document.documentElement.dataset.theme=dark?'dark':'light'; document.documentElement.style.fontSize=(16*settings.fontScale)+'px'; const d=$('.desktop'); if(d){ const wp=WALLPAPERS.find(w=>w.id===settings.wallpaper)||WALLPAPERS[0]; d.className='desktop '+(wp.cls||''); d.style.backgroundImage=wp.url? 'url("'+wp.url+'")':''; } const dock=$('.dock'); if(dock) dock.classList.toggle('left',settings.dockPosition==='left'); }
 
 const APPS:AppDef[]=[
  {id:'files',name:'文件',icon:'📁',desc:'浏览虚拟文件系统，创建/复制/移动/删除/恢复文件',version:'1.0.0',caps:['vfs.read','vfs.write'],render:renderFiles},
@@ -46,6 +65,8 @@ const EXTRA:AppDef={id:'clock',name:'时钟',icon:'🕐',desc:'世界时钟小�
 function openApp(appId:string, arg?:any){
   const app=[...APPS,EXTRA].find(a=>a.id===appId); if(!app) return;
   if(!installed.has(appId)){ toast('请先在应用中心安装 '+app.name); return; }
+  const existing=wm.findByApp(appId);
+  if(existing){ wm.focus(existing.id); syncWins(); const exEl=document.querySelector(`[data-win="${existing.id}"]`) as HTMLElement|null; if(exEl){ exEl.classList.remove('flash'); void exEl.offsetWidth; exEl.classList.add('flash'); if(arg?.path) renderWindow(existing,app,arg); } return; }
   const isSmall=innerWidth<700;
   const win=wm.create(appId,app.name,innerWidth,innerHeight);
   if(isSmall){ win.x=0; win.y=0; win.w=innerWidth; win.h=innerHeight-48; win.maximized=true; }
@@ -55,20 +76,23 @@ function renderWindow(win:any,app:AppDef,arg?:any){
   let el=document.querySelector(`[data-win="${win.id}"]`) as HTMLElement;
   if(!el){ el=document.createElement('section'); el.className='win'; el.dataset.win=win.id; $('.desktop')!.appendChild(el); }
   el.style.left=win.x+'px'; el.style.top=win.y+'px'; el.style.width=win.w+'px'; el.style.height=win.h+'px'; el.style.zIndex=String(win.z); el.classList.toggle('minimized',!!win.minimized);
-  el.innerHTML=`<div class="win-head"><b>${esc(app.name)}</b><button data-a="min" aria-label="最小化">—</button><button data-a="max" aria-label="最大化">□</button><button data-a="close" aria-label="关闭">×</button></div><div class="win-body"></div><div class="resize"></div>`;
+  el.innerHTML=`<div class="win-head"><b>${esc(app.name)}</b><button data-a="min" aria-label="最小化">—</button><button data-a="max" aria-label="最大化">□</button><button data-a="close" aria-label="关闭">×</button></div><div class="win-body"></div><div class="rz-e"></div><div class="rz-s"></div><div class="rz-se"></div>`;
   const body=el.querySelector('.win-body') as HTMLElement;
   try{ app.render(body,{arg,openApp,refresh:()=>renderWindow(win,app,arg)}); }catch(e:any){ body.innerHTML='<p>应用出错：'+esc(e.message||String(e))+'</p>'; }
   const head=el.querySelector('.win-head') as HTMLElement;
-  head.addEventListener('pointerdown',(ev)=>{ if((ev.target as HTMLElement).tagName==='BUTTON') return; wm.focus(win.id); syncWins(); const sx=ev.clientX-win.x, sy=ev.clientY-win.y; const mv=(e:PointerEvent)=>{ win.x=e.clientX-sx; win.y=e.clientY-sy; wm.clamp(win,innerWidth,innerHeight-48); el.style.left=win.x+'px'; el.style.top=win.y+'px'; }; const up=()=>{ removeEventListener('pointermove',mv); removeEventListener('pointerup',up); persist(); }; addEventListener('pointermove',mv); addEventListener('pointerup',up); });
-  el.addEventListener('pointerdown',()=>{ wm.focus(win.id); syncWins(); });
-  el.querySelector('[data-a="close"]')!.addEventListener('click',()=>{ wm.close(win.id); el.remove(); syncDock(); persist(); });
+  head.addEventListener('pointerdown',(ev)=>{ if((ev.target as HTMLElement).tagName==='BUTTON') return; wm.focus(win.id); syncWins(); document.body.classList.add('dragging'); const sx=ev.clientX-win.x, sy=ev.clientY-win.y; const mv=(e:PointerEvent)=>{ win.x=e.clientX-sx; win.y=e.clientY-sy; wm.clamp(win,innerWidth,innerHeight-48); el.style.left=win.x+'px'; el.style.top=win.y+'px'; }; const up=()=>{ removeEventListener('pointermove',mv); removeEventListener('pointerup',up); document.body.classList.remove('dragging'); persist(); }; addEventListener('pointermove',mv); addEventListener('pointerup',up); });
+  el.addEventListener('pointerdown',()=>{ wm.focus(win.id); syncWins(); }, true);
+  el.querySelector('[data-a="close"]')!.addEventListener('click',()=>{ wm.close(win.id); el.classList.add('closing'); setTimeout(()=>el.remove(),150); syncDock(); persist(); });
   el.querySelector('[data-a="min"]')!.addEventListener('click',()=>{ wm.minimize(win.id); syncWins(); });
   el.querySelector('[data-a="max"]')!.addEventListener('click',()=>{ wm.toggleMax(win.id,innerWidth,innerHeight-48); syncWins(); });
-  const rz=el.querySelector('.resize') as HTMLElement;
-  rz.addEventListener('pointerdown',(ev)=>{ ev.stopPropagation(); const sw=win.w,sh=win.h,sx=ev.clientX,sy=ev.clientY; const mv=(e:PointerEvent)=>{ win.w=Math.max(280,sw+e.clientX-sx); win.h=Math.max(200,sh+e.clientY-sy); el.style.width=win.w+'px'; el.style.height=win.h+'px'; }; const up=()=>{ removeEventListener('pointermove',mv); removeEventListener('pointerup',up); persist(); }; addEventListener('pointermove',mv); addEventListener('pointerup',up); });
+  const startResize=(ev:PointerEvent, mode:string)=>{ ev.stopPropagation(); ev.preventDefault(); wm.focus(win.id); syncWins(); document.body.classList.add('resizing'); const sw=win.w, sh=win.h, sx=ev.clientX, sy=ev.clientY; const mv=(e:PointerEvent)=>{ if(mode.includes('e')) win.w=Math.max(280, sw+e.clientX-sx); if(mode.includes('s')) win.h=Math.max(200, sh+e.clientY-sy); el.style.width=win.w+'px'; el.style.height=win.h+'px'; }; const up=()=>{ removeEventListener('pointermove',mv); removeEventListener('pointerup',up); document.body.classList.remove('resizing'); persist(); }; addEventListener('pointermove',mv); addEventListener('pointerup',up); };
+  (el.querySelector('.rz-e') as HTMLElement).addEventListener('pointerdown',(e)=>startResize(e,'e'));
+  (el.querySelector('.rz-s') as HTMLElement).addEventListener('pointerdown',(e)=>startResize(e,'s'));
+  (el.querySelector('.rz-se') as HTMLElement).addEventListener('pointerdown',(e)=>startResize(e,'es'));
+  head.addEventListener('dblclick',()=>{ wm.toggleMax(win.id,innerWidth,innerHeight-50); syncWins(); });
   syncDock();
 }
-function syncWins(){ for(const w of wm.wins){ const el=document.querySelector(`[data-win="${w.id}"]`) as HTMLElement; if(el){ el.style.zIndex=String(w.z); el.style.left=w.x+'px'; el.style.top=w.y+'px'; el.style.width=w.w+'px'; el.style.height=w.h+'px'; el.classList.toggle('minimized',!!w.minimized); } } syncDock(); }
+function syncWins(){ for(const w of wm.wins){ const el=document.querySelector(`[data-win="${w.id}"]`) as HTMLElement; if(el){ el.style.zIndex=String(w.z); el.style.left=w.x+'px'; el.style.top=w.y+'px'; el.style.width=w.w+'px'; el.style.height=w.h+'px'; el.classList.toggle('minimized',!!w.minimized); el.classList.toggle('active', wm.active()?.id===w.id); } } syncDock(); }
 function syncDock(){ const dock=$('.dock'); if(!dock) return; dock.querySelectorAll('button').forEach(b=>{ const id=(b as HTMLElement).dataset.app; b.classList.toggle('running', wm.wins.some(w=>w.appId===id)); }); }
 
 // ---- Apps ----
@@ -142,17 +166,22 @@ function renderCalendar(body:HTMLElement){
   }; draw();
 }
 function renderSettings(body:HTMLElement){
-  body.innerHTML=`<h3>主题与外观</h3><div class="row"><label>主题 <select data-a="theme"><option value="light">浅色</option><option value="dark">深色</option><option value="system">跟随系统</option></select></label><label>壁纸 <select data-a="wp"><option value="default">蓝</option><option value="sunset">日落</option><option value="forest">森林</option><option value="slate">石板</option></select></label><label>字体缩放 <select data-a="fs"><option value="0.9">小</option><option value="1">标准</option><option value="1.15">大</option></select></label><label>Dock <select data-a="dock"><option value="bottom">底部</option><option value="left">左侧</option></select></label></div>
+  body.innerHTML=`<h3>主题与外观</h3><div class="row"><label>主题 <select data-a="theme"><option value="light">浅色</option><option value="dark">深色</option><option value="system">跟随系统</option></select></label><label>壁纸 <select data-a="wp">${WALLPAPERS.map(w=>`<option value="${w.id}">${w.name}</option>`).join('')}</select></label><label>字体缩放 <select data-a="fs"><option value="0.9">小</option><option value="1">标准</option><option value="1.15">大</option></select></label><label>Dock <select data-a="dock"><option value="bottom">底部</option><option value="left">左侧</option></select></label></div>
+  <h3>账户 (模拟)</h3><div class="row"><div class="avatar" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700">${esc(getAcct().name.slice(0,1).toUpperCase()||'W')}</div><div style="flex:1;min-width:180px"><input data-a="acctname" value="${esc(getAcct().name)}" aria-label="显示名"></div><button class="btn" data-a="acctsave">保存名称</button><button class="btn" data-a="logout">退出登录</button></div><p class="muted">这是本机模拟账户, 不连接任何真实服务, 不上传数据。锁屏后用任意密码即可重新登录, 也可访客进入。</p>
+  <h3>壁纸预览</h3><div class="wpgrid">${WALLPAPERS.map(w=>`<button data-wp="${w.id}" class="${settings.wallpaper===w.id?'sel':''}" style="background:${w.url? 'url('+w.url+') center/cover' : w.cls==='wp-sunset'?'linear-gradient(160deg,#7c2d12,#db2777)':w.cls==='wp-forest'?'linear-gradient(160deg,#14532d,#16a34a)':w.cls==='wp-slate'?'linear-gradient(160deg,#0f172a,#334155)':w.cls==='wp-rose'?'linear-gradient(160deg,#881337,#e11d48)':w.cls==='wp-violet'?'linear-gradient(160deg,#2e1065,#7c3aed)':w.cls==='wp-teal'?'linear-gradient(160deg,#042f2e,#0d9488)':'linear-gradient(160deg,#1e3a8a,#2563eb)'}">${w.name}</button>`).join('')}</div>
   <h3>存储</h3><p>虚拟文件总大小：${vfs.totalSize()} 字节 · 文件节点：${vfs.nodes.size} · 便笺：${notes.length} · 日历事件：${events.length}</p>
   <h3>备份与恢复</h3><div class="row"><button class="btn primary" data-a="backup">导出完整备份 JSON</button><label class="btn">恢复备份<input type="file" hidden data-a="restore" accept=".json"></label><button class="btn" data-a="reset">恢复默认设置</button></div>
   <h3>快捷键</h3><p class="muted">Ctrl/Cmd+K 全局搜索 · Ctrl/Cmd+, 设置 · Esc 关闭菜单/启动器</p>
-  <h3>关于</h3><p>WebOS 1.0.0 — 浏览器虚拟操作系统，纯静态、零后端。数据保存在本机 IndexedDB，不会默认上传。</p>`;
+  <h3>关于</h3><p>WebOS 1.1.0 — 浏览器虚拟操作系统，纯静态、零后端。数据保存在本机 IndexedDB，不会默认上传。</p>`;
   const th=body.querySelector('[data-a="theme"]') as HTMLSelectElement; th.value=settings.theme; th.addEventListener('change',()=>{settings.theme=th.value as any; applyTheme(); persist();});
   const wp=body.querySelector('[data-a="wp"]') as HTMLSelectElement; wp.value=settings.wallpaper; wp.addEventListener('change',()=>{settings.wallpaper=wp.value; applyTheme(); persist();});
   const fs=body.querySelector('[data-a="fs"]') as HTMLSelectElement; fs.value=String(settings.fontScale); fs.addEventListener('change',()=>{settings.fontScale=parseFloat(fs.value); applyTheme(); persist();});
   const dk=body.querySelector('[data-a="dock"]') as HTMLSelectElement; dk.value=settings.dockPosition; dk.addEventListener('change',()=>{settings.dockPosition=dk.value as any; applyTheme(); persist();});
   body.querySelector('[data-a="backup"]')!.addEventListener('click',()=>{ const bk=makeBackup({vfs:vfs.serialize(),settings,notes,events}); download('webos-backup.json',JSON.stringify(bk,null,2),'application/json'); });
   const rs=body.querySelector('[data-a="restore"]') as HTMLInputElement; rs.addEventListener('change',async()=>{ const f=rs.files?.[0]; if(!f) return; try{ const txt=await f.text(); const obj=JSON.parse(txt); if(!validateBackup(obj)) throw new Error('备份格式无效或过大'); if(!confirm('恢复将覆盖当前数据，确定继续？')) return; vfs=VFS.deserialize(obj.vfs); settings=obj.settings; notes=obj.notes; events=obj.events; applyTheme(); persist(); toast('恢复成功'); }catch(e:any){ alert('恢复失败，原数据未改动：'+e.message); } });
+  body.querySelectorAll('[data-wp]').forEach(b=>b.addEventListener('click',()=>{ settings.wallpaper=(b as HTMLElement).dataset.wp!; applyTheme(); persist(); renderSettings(body); }));
+  body.querySelector('[data-a="acctsave"]')!.addEventListener('click',()=>{ const v=(body.querySelector('[data-a="acctname"]') as HTMLInputElement).value.trim(); if(v){ setAcct({name:v}); toast('账户名称已更新 (下次锁屏/登录生效)'); } });
+  body.querySelector('[data-a="logout"]')!.addEventListener('click',()=>logout());
   body.querySelector('[data-a="reset"]')!.addEventListener('click',()=>{ if(confirm('恢复默认设置？')){ settings={theme:'system',wallpaper:'default',fontScale:1,dockPosition:'bottom'}; applyTheme(); persist(); renderSettings(body); } });
 }
 function renderTasks(body:HTMLElement,ctx:any){ const draw=()=>{ body.innerHTML= wm.wins.length? `<ul class="list">${wm.wins.map(w=>`<li><b>${esc(w.title)}</b><span class="muted">${w.appId} · ${w.minimized?'最小化':'可见'} · ${w.w}x${w.h}</span><button class="btn" data-f="${w.id}">切换到</button><button class="btn" data-c="${w.id}">关闭</button></li>`).join('')}</ul>`:'<p>当前没有运行中的应用。</p>';
@@ -166,11 +195,14 @@ function renderStore(body:HTMLElement){ const all=[...APPS,EXTRA]; body.innerHTM
 }
 
 function shell(){
-  appEl.innerHTML=`<header class="topbar"><button id="launcherBtn" aria-label="启动器">⊞ WebOS</button><button id="searchBtn">🔍 搜索 (Ctrl+K)</button><span style="flex:1"></span><span id="clock"></span><button id="notifBtn" aria-label="通知">🔔</button><button id="offline" class="muted" style="display:none">离线</button></header><main class="desktop"><div class="dock">${APPS.map(a=>`<button data-app="${a.id}"><span class="ic">${a.icon}</span>${a.name}<span class="dot"></span></button>`).join('')}</div></main>`;
+  appEl.innerHTML=`<header class="topbar"><button id="launcherBtn" aria-label="启动器">⊞ WebOS</button><button id="searchBtn">🔍 搜索 (Ctrl+K)</button><span style="flex:1"></span><span id="clock"></span><button id="acctBtn">👤</button><button id="lockBtn" aria-label="锁定">🔒</button><button id="notifBtn" aria-label="通知">🔔</button><button id="offline" class="muted" style="display:none">离线</button></header><main class="desktop"><div class="dock">${APPS.map(a=>`<button data-app="${a.id}"><span class="ic">${a.icon}</span>${a.name}<span class="dot"></span></button>`).join('')}</div></main>`;
   applyTheme();
   const clock=()=>{ const e=$('#clock'); if(e) e.textContent=new Date().toLocaleString(); }; clock(); setInterval(clock,1000);
   document.querySelectorAll('.dock button').forEach(b=>b.addEventListener('click',()=>openApp((b as HTMLElement).dataset.app!)));
-  $('#launcherBtn')!.addEventListener('click',showLauncher);
+  const ab=$('#acctBtn'); if(ab){ ab.textContent='👤 '+getAcct().name; ab.addEventListener('click',()=>openApp('settings')); }
+  const lk=$('#lockBtn'); if(lk) lk.addEventListener('click',()=>logout());
+  $('#launcherBtn')!.addEventListener('click',(e)=>{ e.stopPropagation(); if(document.querySelector('.launcher')){ document.querySelectorAll('.launcher').forEach(x=>x.remove()); } else showLauncher(); });
+  document.addEventListener('pointerdown',(e)=>{ const t=e.target as HTMLElement; if(!t.closest('.launcher,.searchbox,#launcherBtn,#searchBtn,.ctx')) document.querySelectorAll('.launcher,.searchbox').forEach(x=>x.remove()); });
   $('#searchBtn')!.addEventListener('click',showSearch);
   $('#notifBtn')!.addEventListener('click',()=>{ const n=JSON.parse(localStorage.getItem('webos-notifs')||'[]'); alert(n.length? n.map((x:any)=>new Date(x.at).toLocaleString()+' '+x.msg).join('\n'):'暂无通知'); });
   const desk=$('.desktop')!; desk.addEventListener('contextmenu',(e)=>{ e.preventDefault(); showCtx(e.clientX,e.clientY); });
@@ -179,8 +211,8 @@ function shell(){
   addEventListener('keydown',(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); showSearch(); } if((e.metaKey||e.ctrlKey)&&e.key===','){ e.preventDefault(); openApp('settings'); } if(e.key==='Escape'){ document.querySelectorAll('.launcher,.searchbox,.ctx').forEach(x=>x.remove()); } });
 }
 function showCtx(x:number,y:number){ document.querySelectorAll('.ctx').forEach(e=>e.remove()); const c=document.createElement('div'); c.className='ctx'; c.style.left=Math.min(x,innerWidth-180)+'px'; c.style.top=Math.min(y,innerHeight-180)+'px'; c.innerHTML=`<button data-a="files">打开文件管理器</button><button data-a="new">新建文件 welcome-note.txt</button><button data-a="wp">切换壁纸</button><button data-a="settings">设置</button>`; document.body.appendChild(c); c.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{ const a=(b as HTMLElement).dataset.a; c.remove(); if(a==='files') openApp('files'); if(a==='settings') openApp('settings'); if(a==='wp'){ settings.wallpaper=settings.wallpaper==='default'?'sunset':'default'; applyTheme(); persist(); } if(a==='new'){ vfs.createFile('/home/user/welcome-note.txt','Created from desktop menu'); persist(); toast('已创建文件'); } })); setTimeout(()=>addEventListener('click',()=>c.remove(),{once:true}),0); }
-function showLauncher(){ document.querySelectorAll('.launcher,.searchbox').forEach(e=>e.remove()); const d=document.createElement('div'); d.className='launcher'; d.innerHTML=`<h3 style="margin:4px 0 10px">应用启动器</h3><div class="grid">${APPS.filter(a=>installed.has(a.id)).map(a=>`<button data-app="${a.id}"><div style="font-size:26px">${a.icon}</div>${a.name}</button>`).join('')}</div>`; $('.desktop')!.appendChild(d); d.querySelectorAll('[data-app]').forEach(b=>b.addEventListener('click',()=>{ d.remove(); openApp((b as HTMLElement).dataset.app!); })); }
+function showLauncher(){ document.querySelectorAll('.launcher,.searchbox').forEach(e=>e.remove()); const d=document.createElement('div'); d.className='launcher'; d.innerHTML=`<div class="row" style="justify-content:space-between"><h3 style="margin:4px 0 10px">应用启动器</h3><button class="btn" data-a="x">✕ 关闭</button></div><div class="grid">${APPS.filter(a=>installed.has(a.id)).map(a=>`<button data-app="${a.id}"><div style="font-size:26px">${a.icon}</div>${a.name}</button>`).join('')}</div>`; $('.desktop')!.appendChild(d); d.querySelector('[data-a="x"]')!.addEventListener('click',()=>d.remove()); d.querySelectorAll('[data-app]').forEach(b=>b.addEventListener('click',()=>{ d.remove(); openApp((b as HTMLElement).dataset.app!); })); }
 function showSearch(){ document.querySelectorAll('.launcher,.searchbox').forEach(e=>e.remove()); const d=document.createElement('div'); d.className='searchbox'; d.innerHTML=`<input placeholder="搜索应用、文件、便笺..." autofocus><ul class="list" style="margin-top:10px"></ul>`; $('.desktop')!.appendChild(d); const inp=d.querySelector('input')!; const list=d.querySelector('.list')!;
   inp.addEventListener('input',()=>{ const q=(inp as HTMLInputElement).value.trim(); if(!q){list.innerHTML='';return;} const apps=APPS.filter(a=>a.name.includes(q)).map(a=>`<li>应用：${esc(a.name)} <button class="btn" data-open="${a.id}">打开</button></li>`); const files=vfs.search(q).slice(0,8).map(n=>`<li>文件：${esc(vfs.pathOf(n))}</li>`); const ns=notes.filter(n=>n.title.includes(q)||n.body.includes(q)).map(n=>`<li>便笺：${esc(n.title)}</li>`); list.innerHTML=[...apps,...files,...ns].join('')||'<li>无结果</li>'; list.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>{ d.remove(); openApp((b as HTMLElement).dataset.open!); })); }); inp.focus(); }
 
-(async()=>{ await restore(); shell(); notify('WebOS 已启动'); if('serviceWorker' in navigator){ try{ await navigator.serviceWorker.register('./sw.js'); }catch{} } })();
+(async()=>{ showBoot(); await restore(); shell(); notify('WebOS 已启动'); if('serviceWorker' in navigator){ try{ await navigator.serviceWorker.register('./sw.js'); }catch{} } setTimeout(()=>{ const b=document.querySelector('.boot'); if(b){ b.classList.add('hide'); setTimeout(()=>b.remove(),500); } if(!isLoggedIn()) showLogin(); },1650); })();
