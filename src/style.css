@@ -129,3 +129,51 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-
 .sp-loc button{text-align:left;padding:9px 10px;border-radius:9px;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;min-height:40px}
 .sp-loc button.on{background:var(--accent);color:#fff}
 .sp-loc button.on .muted{color:rgba(255,255,255,.75)}
+/* ===== WebOS 1.5 macOS 式布局 ===== */
+.win-head{display:flex;align-items:center;gap:10px}
+.tls{display:flex;gap:8px}
+.tl{width:15px;height:15px;border-radius:50%;border:0;cursor:pointer;font-size:10px;line-height:1;display:flex;align-items:center;justify-content:center;color:rgba(0,0,0,.55);padding:0}
+.tclose{background:#ff5f57}.tmin{background:#febc2e}.tmax{background:#28c840}
+.tl span{pointer-events:none}
+.win-title{flex:1;text-align:center;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.win-sp{width:61px;flex:none}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.seg button{border:0;background:transparent;color:inherit;font:inherit;padding:7px 10px;cursor:pointer;min-height:36px}
+.seg button.on{background:var(--accent);color:#fff}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;padding:8px 0}
+.ftile{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 6px;border-radius:12px;border:1px solid transparent;background:transparent;color:inherit;font:inherit;cursor:pointer;word-break:break-all}
+.ftile span{font-size:34px}
+.ftile.on{background:rgba(37,99,235,.16);border-color:var(--accent)}
+.ed-group{font-size:12px;font-weight:700;color:var(--muted);padding:10px 6px 2px;list-style:none}
+.ed-file{width:100%;text-align:left;border:0;background:transparent}
+.ed-file:hover{background:rgba(127,127,127,.15)}
+/* 设置: macOS 双栏 */
+.setwrap{display:flex;height:100%;min-height:0}
+.setnav{width:200px;flex:none;border-right:1px solid var(--border);padding:10px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+.setprofile{display:flex;gap:10px;align-items:center;padding:6px 6px 12px}
+.setitem{text-align:left;padding:10px;border-radius:10px;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;min-height:42px}
+.setitem.on{background:var(--accent);color:#fff}
+.setpane{flex:1;min-width:0;overflow:auto;padding:14px 16px}
+.dangerbox{border:1px solid rgba(220,38,38,.4);border-radius:14px;padding:14px;margin-bottom:12px}
+.btn.danger{background:#dc2626;color:#fff;border-color:transparent}
+/* 系统资源条 */
+.sysbox{display:flex;flex-direction:column;gap:9px;max-width:560px}
+.sysrow{display:grid;grid-template-columns:minmax(150px,1.2fr) 1fr auto;gap:10px;align-items:center}
+.sysbar{height:10px;border-radius:99px;background:rgba(127,127,127,.28);overflow:hidden;min-width:90px}
+.sysbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#2563eb,#7c3aed);transition:width .6s}
+/* WebSearch */
+.ws-bar{display:flex;gap:6px;align-items:center;margin-bottom:10px}
+.ws-addr{flex:1}.ws-addr input{width:100%;border-radius:99px;padding-left:16px}
+.ws-home{text-align:center;padding:26px 10px}
+.ws-logo{font-size:42px;font-weight:800;letter-spacing:-1px}
+.ws-logo span{background:linear-gradient(120deg,#2563eb,#7c3aed,#db2777);-webkit-background-clip:text;background-clip:text;color:transparent}
+.ws-sbox{display:flex;gap:8px;max-width:520px;margin:18px auto}
+.ws-sbox input{flex:1;border-radius:99px;padding-left:18px;min-height:48px;font-size:16px}
+.ws-sites{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;max-width:640px;margin:16px auto}
+.ws-sites button{display:flex;flex-direction:column;gap:2px;padding:14px;border-radius:14px;border:1px solid var(--border);background:var(--panel);color:inherit;font:inherit;cursor:pointer;text-align:left}
+.ws-sites small{color:var(--muted)}
+.ws-r{margin:14px 0}
+.ws-rt{border:0;background:none;color:var(--accent);font-size:17px;font-weight:600;cursor:pointer;padding:0;text-align:left}
+.ws-url{color:#15803d;font-size:13px}
+.ws-badge{display:inline-block;background:rgba(37,99,235,.15);color:var(--accent);border-radius:99px;padding:3px 10px;font-size:12px;font-weight:700}
+@media (max-width:700px){ .setnav{width:132px} .sysrow{grid-template-columns:1fr auto} .sysbar{display:none} }
