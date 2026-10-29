@@ -8,6 +8,10 @@ import { validateBackup, makeBackup } from './core/backup';
 import { renderMarkdown } from './core/markdown';
 import type { DeskItem } from './core/desktop';
 import { genProfile, computeUsage } from './core/sysinfo';
+import { VERSIONS, LATEST_VERSION, cmpVer } from './core/version';
+function curVer(){ return localStorage.getItem('webos-version')||LATEST_VERSION; }
+function setVer(v:string){ localStorage.setItem('webos-version', v); }
+function setProfile(p2:SysProfile){ try{ localStorage.setItem('webos-sysprofile', JSON.stringify(p2)); }catch{} }
 import type { SysProfile } from './core/sysinfo';
 function getProfile():SysProfile{ try{ const s=JSON.parse(localStorage.getItem('webos-sysprofile')||'null'); if(s&&s.cpu) return s; }catch{} const pr=genProfile(); try{ localStorage.setItem('webos-sysprofile', JSON.stringify(pr)); }catch{} return pr; }
 function sysUsage(tick:number){ return computeUsage(getProfile(), {windows: wm.wins.length, vfsBytes: vfs.totalSize(), tick}); }
@@ -75,17 +79,21 @@ const APPS:AppDef[]=[
  {id:'editor',name:'编辑器',icon:'📝',desc:'多标签文本/Markdown 编辑器，带未保存提示',version:'1.0.0',caps:['vfs.read','vfs.write'],render:renderEditor},
  {id:'terminal',name:'终端',icon:'⌨️',desc:'连接虚拟文件系统的命令解释器',version:'1.0.0',caps:['vfs'],render:renderTerminal},
  {id:'calc',name:'计算器',icon:'🧮',desc:'安全表达式计算器（不用 eval）',version:'1.0.0',caps:[],render:renderCalc},
- {id:'notes',name:'便笺',icon:'📌',desc:'自动保存的便笺，支持搜索/标签/导出',version:'1.0.0',caps:['storage'],render:renderNotes},
+ {id:'notes',name:'便笺',icon:'📌',desc:'自动保存的便笺，支持搜索/标签/导出',version:'1.6.0',caps:['storage'],render:renderNotes},
  {id:'calendar',name:'日历',icon:'📅',desc:'本地日历（未连接外部账户）',version:'1.0.0',caps:['storage'],render:renderCalendar},
  {id:'settings',name:'设置',icon:'⚙️',desc:'主题、壁纸、备份恢复、存储信息',version:'1.0.0',caps:['settings'],render:renderSettings},
  {id:'tasks',name:'任务管理',icon:'📊',desc:'查看运行中的窗口并切换/关闭',version:'1.0.0',caps:[],render:renderTasks},
  {id:'clock',name:'时钟',icon:'🕐',desc:'本地时钟、世界时钟、秒表与倒计时',version:'1.2.0',caps:[],render:renderClock},
  {id:'todo',name:'待办',icon:'✅',desc:'待办清单, 自动保存, 可导出到文件',version:'1.2.0',caps:['storage'],render:renderTodo},
  {id:'paint',name:'画板',icon:'🎨',desc:'SVG 画板, 作品可保存到虚拟文件系统',version:'1.2.0',caps:['vfs.write'],render:renderPaint},
- {id:'music',name:'音乐',icon:'🎵',desc:'WebAudio 合成钢琴, 可弹奏与播放旋律',version:'1.2.0',caps:[],render:renderMusic},
- {id:'snake',name:'贪吃蛇',icon:'🐍',desc:'经典贪吃蛇小游戏, 支持触控按钮',version:'1.2.0',caps:[],render:renderSnake},
+ {id:'music',name:'音乐',icon:'🎵',desc:'WebAudio 合成钢琴, 可弹奏与播放旋律',version:'1.6.0',caps:[],render:renderMusic},
+ {id:'snake',name:'贪吃蛇',icon:'🐍',desc:'经典贪吃蛇小游戏, 支持触控按钮',version:'1.6.0',caps:[],render:renderSnake},
+ {id:'photos',name:'相册',icon:'🖼️',desc:'浏览全部壁纸图库, 一键设为壁纸',version:'1.6.0',caps:[],render:renderPhotos},
+ {id:'reader',name:'阅读器',icon:'📖',desc:'舒适地阅读虚拟文件 (支持 Markdown 与字号调节)',version:'1.6.0',caps:[],render:renderReader},
+ {id:'typing',name:'打字练习',icon:'⌨️',desc:'中英文打字练习, 实时统计速度与准确率',version:'1.6.0',caps:[],render:renderTyping},
+ {id:'convert',name:'单位换算',icon:'🔄',desc:'长度、重量、温度单位换算',version:'1.6.0',caps:[],render:renderConvert},
  {id:'websearch',name:'WebSearch',icon:'🧭',desc:'模拟浏览器: 模拟搜索与模拟站点 (不联网, 不请求真实网站)',version:'1.5.0',caps:[],render:renderWebSearch},
- {id:'weather',name:'天气',icon:'🌤️',desc:'天气界面演示 (本地模拟数据, 未连接天气服务)',version:'1.2.0',caps:[],render:renderWeather},
+ {id:'weather',name:'天气',icon:'🌤️',desc:'天气界面演示 (本地模拟数据, 未连接天气服务)',version:'1.6.0',caps:[],render:renderWeather},
  {id:'store',name:'应用中心',icon:'🛍️',desc:'已安装应用目录，可安装/卸载扩展应用',version:'1.0.0',caps:[],render:renderStore},
 ];
 APPS.forEach(a=>installed.add(a.id));
@@ -213,12 +221,13 @@ function renderCalc(body:HTMLElement){
 }
 function renderNotes(body:HTMLElement,ctx:any){
   const draw=(q='')=>{ const list=notes.filter(n=>!q||n.title.toLowerCase().includes(q.toLowerCase())||n.body.includes(q)||n.tags.join(',').includes(q));
-    body.innerHTML=`<div class="row"><button class="btn primary" data-a="new">新建便笺</button><input data-a="q" placeholder="搜索便笺/标签" value="${esc(q)}" style="flex:1"></div><ul class="list" style="margin-top:10px">${list.map(n=>`<li style="display:block"><b>${esc(n.title)}</b> <span class="muted">${n.tags.map(t=>'#'+esc(t)).join(' ')} · ${new Date(n.updatedAt).toLocaleString()}</span><textarea data-body="${n.id}" style="height:90px;margin-top:6px">${esc(n.body)}</textarea><div class="row"><button class="btn" data-del="${n.id}">删除</button><button class="btn" data-exp="${n.id}">导出</button></div></li>`).join('')}</ul>`;
+    body.innerHTML=`<div class="row"><button class="btn primary" data-a="new">新建便笺</button><input data-a="q" placeholder="搜索便笺/标签" value="${esc(q)}" style="flex:1"></div><ul class="list" style="margin-top:10px">${list.map(n=>`<li style="display:block"><b>${esc(n.title)}</b> <span class="muted">${n.tags.map(t=>'#'+esc(t)).join(' ')} · ${new Date(n.updatedAt).toLocaleString()}</span><textarea data-body="${n.id}" style="height:90px;margin-top:6px">${esc(n.body)}</textarea><div class="row"><button class="btn" data-del="${n.id}">删除</button><button class="btn" data-exp="${n.id}">导出</button><button class="btn" data-save="${n.id}">存到桌面</button></div></li>`).join('')}</ul>`;
     body.querySelector('[data-a="new"]')!.addEventListener('click',()=>{ notes.unshift({id:uid(),title:'未命名便笺',body:'',tags:[],updatedAt:Date.now()}); persist(); draw(q); });
     (body.querySelector('[data-a="q"]') as HTMLInputElement).addEventListener('input',(e)=>draw((e.target as HTMLInputElement).value));
     body.querySelectorAll('[data-body]').forEach(t=>t.addEventListener('input',()=>{ const n=notes.find(x=>x.id===(t as HTMLElement).dataset.body); if(n){ n.body=(t as HTMLTextAreaElement).value; n.updatedAt=Date.now(); persist(); } }));
     body.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>{ notes=notes.filter(x=>x.id!==(b as HTMLElement).dataset.del); persist(); draw(q); }));
     body.querySelectorAll('[data-exp]').forEach(b=>b.addEventListener('click',()=>{ const n=notes.find(x=>x.id===(b as HTMLElement).dataset.exp); if(n) download(n.title+'.md',n.body); }));
+    body.querySelectorAll('[data-save]').forEach(b=>b.addEventListener('click',()=>{ const n=notes.find(x=>x.id===(b as HTMLElement).dataset.save); if(n){ try{ if(!vfs.resolve('/home/user/Desktop')) vfs.mkdir('/home/user/Desktop'); vfs.createFile('/home/user/Desktop/'+n.title+'.md', n.body); persist(); renderDeskIcons(); toast('已存到桌面: '+n.title+'.md'); }catch(e:any){ alert(e.message); } } }));
   }; draw();
 }
 function renderCalendar(body:HTMLElement){
@@ -238,18 +247,19 @@ function renderCalendar(body:HTMLElement){
 function deleteAccount(){ if(!confirm('注销账户? 将删除本机保存的模拟账户与密码, 需要重新注册才能登录。文件与数据会保留 (如需全清请用「格式化」)。')) return; localStorage.removeItem('webos-account'); localStorage.removeItem('webos-loggedin'); toast('账户已注销'); showLogin(); }
 function formatSystem(){ if(!confirm('格式化 WebOS? 将清空全部虚拟文件、便笺、日历、待办、设置、桌面布局与账户, 恢复出厂状态。')) return; if(!confirm('再次确认: 此操作不可恢复, 确定格式化?')) return;
   vfs=new VFS(); settings={theme:'system',wallpaper:'moss',fontScale:1,dockPosition:'bottom',desktopIcons:true}; notes=[{id:uid(),title:'欢迎便笺',body:'WebOS 便笺会自动保存，刷新后恢复。',tags:['welcome'],updatedAt:Date.now()}]; events=[]; todos=[]; installed=new Set(APPS.map(a=>a.id)); desk={items:seedItems(APPS),pos:{}}; saveDesk();
-  for(const k of ['webos-account','webos-loggedin','webos-notifs','webos-sysprofile']) localStorage.removeItem(k);
+  for(const k of ['webos-account','webos-loggedin','webos-notifs','webos-sysprofile','webos-version']) localStorage.removeItem(k);
   persist(); toast('已格式化, 正在重启…'); setTimeout(()=>location.reload(),600); }
 function renderSettings(body:HTMLElement){
   let sec='account';
   const draw=()=>{
     const acct=getAcct(); const prof=getProfile(); const u=sysUsage(0);
-    const nav:[string,string][]=[['account','👤 账户'],['appearance','🎨 外观'],['storage','💾 储存与备份'],['system','🖥 系统信息'],['danger','⚠️ 维护']];
+    const nav:[string,string][]=[['account','👤 账户'],['appearance','🎨 外观'],['storage','💾 储存与备份'],['system','🖥 系统信息'],['update','⬆️ 软件更新'],['danger','⚠️ 维护']];
     let main='';
     if(sec==='account') main=`<h3>账户 (模拟)</h3><div class="row"><div class="avatar" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700">${esc(acct.name.slice(0,1).toUpperCase()||'W')}</div><div style="flex:1;min-width:160px"><input data-a="acctname" value="${esc(acct.name)}" aria-label="显示名"></div><button class="btn" data-a="acctsave">保存名称</button><button class="btn" data-a="logout">退出登录</button></div><div class="row" style="margin-top:8px"><input type="password" data-a="acctpw" placeholder="设置/修改登录密码 (模拟, 仅存本机哈希)" style="flex:1;min-width:180px"><button class="btn" data-a="acctpwbtn">保存密码</button></div><p class="muted">本机模拟账户 (WebOS ID), 不连接真实服务, 不上传数据。锁屏后: 已设密码需输入该密码, 未设密码任意输入可登录, 也可访客进入。注销账户在「维护」页。</p>`;
     if(sec==='appearance') main=`<h3>外观</h3><div class="row"><label>主题 <select data-a="theme"><option value="light">浅色</option><option value="dark">深色</option><option value="system">跟随系统</option></select></label><label>字体缩放 <select data-a="fs"><option value="0.9">小</option><option value="1">标准</option><option value="1.15">大</option></select></label><label>Dock 位置 <select data-a="dock"><option value="bottom">底部</option><option value="left">左侧</option></select></label></div><label style="display:block;margin-top:10px">壁纸 <select data-a="wp">${WALLPAPERS.map(w=>`<option value="${w.id}">${w.name}</option>`).join('')}</select></label><div class="wpgrid" style="margin-top:8px">${WALLPAPERS.map(w=>`<button data-wp="${w.id}" class="${settings.wallpaper===w.id?'sel':''}" style="background:${w.url? 'url('+w.url+') center/cover' : w.cls==='wp-moss'?'linear-gradient(160deg,#1d3b2a,#65a30d)':w.cls==='wp-sunset'?'linear-gradient(160deg,#7c2d12,#db2777)':w.cls==='wp-forest'?'linear-gradient(160deg,#14532d,#16a34a)':w.cls==='wp-slate'?'linear-gradient(160deg,#0f172a,#334155)':w.cls==='wp-rose'?'linear-gradient(160deg,#881337,#e11d48)':w.cls==='wp-violet'?'linear-gradient(160deg,#2e1065,#7c3aed)':w.cls==='wp-teal'?'linear-gradient(160deg,#042f2e,#0d9488)':'linear-gradient(160deg,#1e3a8a,#2563eb)'}">${w.name}</button>`).join('')}</div>`;
     if(sec==='storage') main=`<h3>储存与备份</h3><p>虚拟文件总大小: ${vfs.totalSize()} 字节 · 文件节点: ${vfs.nodes.size} · 便笺: ${notes.length} · 日历事件: ${events.length} · 待办: ${todos.length}</p><p>储存空间 (模拟总量): ${u.storageUsedGB.toFixed(2)} / ${prof.storageGB} GB 已用 (${u.storagePct}%)</p><div class="sysbar" style="max-width:420px"><i style="width:${Math.min(100,u.storagePct)}%"></i></div><div class="row" style="margin-top:10px"><button class="btn primary" data-a="backup">导出完整备份 JSON</button><label class="btn">恢复备份<input type="file" hidden data-a="restore" accept=".json"></label><button class="btn" data-a="reset">恢复默认设置</button></div><p class="muted">备份包含虚拟文件、设置、便笺、日历、待办。恢复前会先校验格式, 失败不会覆盖现有数据。</p>`;
-    if(sec==='system') main=`<h3>系统信息 (虚拟硬件 · 模拟)</h3><ul class="list"><li><span>芯片 CPU</span><b>${prof.cpu} · ${prof.cores} 核</b></li><li><span>图形 GPU</span><b>${prof.gpu}</b></li><li><span>内存</span><b>${prof.ramGB} GB (当前模拟占用 ${u.ramUsedGB.toFixed(1)} GB)</b></li><li><span>储存</span><b>${prof.storageGB} GB (已用 ${u.storageUsedGB.toFixed(2)} GB)</b></li><li><span>系统</span><b>WebOS 1.5.0 · 默认风格 极光玻璃</b></li></ul><p class="muted">以上为本机生成的虚拟硬件档案, 储存在本地; 实时占用曲线请看「任务管理器」。CPU/GPU/内存占用为模拟值, 储存已用量 = 系统保留 3.2 GB + 你的虚拟文件大小。</p><h3 style="margin-top:14px">快捷键</h3><p class="muted">Ctrl/Cmd+K 全局搜索 · Ctrl/Cmd+, 打开设置 · 编辑器 Ctrl/Cmd+S 保存 · Esc 关闭菜单 · 桌面: 单击选中, 双击打开, 长按 0.32 秒打开项目菜单。</p>`;
+    if(sec==='system') main=`<h3>系统信息 (虚拟硬件 · 模拟)</h3><ul class="list"><li><span>芯片 CPU</span><b>${prof.cpu} · ${prof.cores} 核</b></li><li><span>图形 GPU</span><b>${prof.gpu}</b></li><li><span>内存</span><b>${prof.ramGB} GB (当前模拟占用 ${u.ramUsedGB.toFixed(1)} GB)</b></li><li><span>储存</span><b>${prof.storageGB} GB (已用 ${u.storageUsedGB.toFixed(2)} GB)</b></li><li><span>系统</span><b>WebOS ${curVer()} · 默认风格 极光玻璃</b></li></ul><h3 style="margin-top:14px">调整虚拟硬件</h3><div class="row"><label>CPU <select data-hw="cpu">${['WebCore W1','WebCore W1 Pro','WebCore W2','Aurora Silicon A1'].map(c=>`<option ${prof.cpu===c?'selected':''}>${c}</option>`).join('')}</select></label><label>核心 <select data-hw="cores">${[8,10,12,16].map(c=>`<option ${prof.cores===c?'selected':''}>${c}</option>`).join('')}</select></label><label>GPU <select data-hw="gpu">${['Aurora GPU G1 (集成)','Aurora GPU G2 (集成)','WebGL Render X'].map(c=>`<option ${prof.gpu===c?'selected':''}>${c}</option>`).join('')}</select></label><label>内存 <select data-hw="ram">${[8,16,24,32,64].map(c=>`<option value="${c}" ${prof.ramGB===c?'selected':''}>${c} GB</option>`).join('')}</select></label><label>储存 <select data-hw="storage">${[128,256,512,1024].map(c=>`<option value="${c}" ${prof.storageGB===c?'selected':''}>${c} GB</option>`).join('')}</select></label><button class="btn primary" data-a="hwsave">保存配置</button></div><p class="muted">以上为本机生成的虚拟硬件档案, 可自由调节并保存在本地; 实时占用请看「任务管理器」。CPU/GPU/内存占用为模拟值, 储存已用量 = 系统保留 3.2 GB + 你的虚拟文件大小。</p><h3 style="margin-top:14px">快捷键</h3><p class="muted">Ctrl/Cmd+K 全局搜索 · Ctrl/Cmd+, 打开设置 · 编辑器 Ctrl/Cmd+S 保存 · Esc 关闭菜单 · 桌面: 单击选中, 双击打开, 长按 0.32 秒打开项目菜单。</p>`;
+    if(sec==='update'){ const cv=curVer(); const behind=cmpVer(cv,LATEST_VERSION)<0; main=`<h3>软件更新</h3><div class="dangerbox" style="border-color:var(--border)"><b>当前版本: WebOS ${cv}</b><p class="muted">${behind? '有新版本可升级: '+LATEST_VERSION : '已是最新版本 ('+LATEST_VERSION+')'}</p>${behind?`<button class="btn primary" data-a="upgrade">升级到 ${LATEST_VERSION}</button><div class="sysbar" data-a="upbar" style="display:none;max-width:420px;margin-top:10px"><i style="width:0%"></i></div>`:''}</div><h3>版本日志</h3>${VERSIONS.map(x=>`<div class="veritem ${x.v===cv?'on':''}"><div class="row"><b>WebOS ${x.v}</b><span class="muted">${x.date}</span>${x.v===cv?'<span class="ws-badge">当前版本</span>':''}${cmpVer(x.v,cv)<0?`<button class="btn" data-roll="${x.v}">回退到此版本</button>`:''}</div><p class="muted">${x.notes}</p></div>`).join('')}<p class="muted">说明: WebOS 为纯静态模拟系统, 版本切换只切换版本标识与日志状态 (模拟回退/升级), 不删除你的文件与数据。</p>`; }
     if(sec==='danger') main=`<h3>维护</h3><div class="dangerbox"><b>注销账户</b><p class="muted">删除本机保存的模拟账户与密码, 退出到登录页, 之后需要重新注册。文件与数据保留。</p><button class="btn" data-a="delacct">注销账户</button></div><div class="dangerbox"><b>格式化</b><p class="muted">清空全部虚拟文件、便笺、日历、待办、设置、桌面布局与账户, 恢复出厂状态。此操作不可恢复。</p><button class="btn danger" data-a="format">格式化 WebOS</button></div>`;
     body.innerHTML=`<div class="setwrap"><aside class="setnav"><div class="setprofile"><div class="avatar" style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700">${esc(acct.name.slice(0,1).toUpperCase()||'W')}</div><div style="min-width:0"><b>${esc(acct.name)}</b><div class="muted" style="font-size:12px">WebOS ID (模拟)</div></div></div>${nav.map(n=>`<button class="setitem ${sec===n[0]?'on':''}" data-sec="${n[0]}">${n[1]}</button>`).join('')}</aside><div class="setpane">${main}</div></div>`;
     body.querySelectorAll('[data-sec]').forEach(b=>b.addEventListener('click',()=>{ sec=(b as HTMLElement).dataset.sec!; draw(); }));
@@ -269,6 +279,13 @@ function renderSettings(body:HTMLElement){
       body.querySelector('[data-a="backup"]')!.addEventListener('click',()=>{ const bk=makeBackup({vfs:vfs.serialize(),settings,notes,events,todos}); download('webos-backup.json',JSON.stringify(bk,null,2),'application/json'); });
       const rs=body.querySelector('[data-a="restore"]') as HTMLInputElement; rs.addEventListener('change',async()=>{ const f=rs.files?.[0]; if(!f) return; try{ const txt=await f.text(); const obj=JSON.parse(txt); if(!validateBackup(obj)) throw new Error('备份格式无效或过大'); if(!confirm('恢复将覆盖当前数据, 确定继续?')) return; vfs=VFS.deserialize(obj.vfs); settings=obj.settings; notes=obj.notes; events=obj.events; if(obj.todos) todos=obj.todos; applyTheme(); persist(); toast('恢复成功'); draw(); }catch(e:any){ alert('恢复失败, 原数据未改动: '+e.message); } });
       body.querySelector('[data-a="reset"]')!.addEventListener('click',()=>{ if(confirm('恢复默认设置?')){ settings={theme:'system',wallpaper:'moss',fontScale:1,dockPosition:'bottom',desktopIcons:true}; applyTheme(); persist(); draw(); } });
+    }
+    if(sec==='system'){
+      body.querySelector('[data-a="hwsave"]')!.addEventListener('click',()=>{ const g=(k:string)=>(body.querySelector(`[data-hw="${k}"]`) as HTMLSelectElement).value; setProfile({cpu:g('cpu'), cores:parseInt(g('cores')), gpu:g('gpu'), ramGB:parseInt(g('ram')), storageGB:parseInt(g('storage'))}); toast('虚拟硬件配置已保存'); draw(); });
+    }
+    if(sec==='update'){
+      body.querySelectorAll('[data-roll]').forEach(b=>b.addEventListener('click',()=>{ const v=(b as HTMLElement).dataset.roll!; if(confirm('回退到 WebOS '+v+' ? (模拟回退: 只切换版本标识, 数据保留)')){ setVer(v); toast('已回退到 '+v); draw(); } }));
+      const up=body.querySelector('[data-a="upgrade"]'); if(up) up.addEventListener('click',()=>{ const bar=body.querySelector('[data-a="upbar"]') as HTMLElement; bar.style.display='block'; const fill=bar.querySelector('i') as HTMLElement; let pc=0; const iv2=setInterval(()=>{ pc+=20; fill.style.width=pc+'%'; if(pc>=100){ clearInterval(iv2); setVer(LATEST_VERSION); toast('升级完成: '+LATEST_VERSION); draw(); } },260); });
     }
     if(sec==='danger'){
       body.querySelector('[data-a="delacct"]')!.addEventListener('click',()=>deleteAccount());
@@ -341,31 +358,93 @@ function renderPaint(body:HTMLElement){
 }
 function renderMusic(body:HTMLElement){
   let ctxA:AudioContext|null=null; const NOTES:[string,number][]=[['C4',261.63],['D4',293.66],['E4',329.63],['F4',349.23],['G4',392],['A4',440],['B4',493.88],['C5',523.25]];
-  body.innerHTML=`<p class="muted">WebAudio 实时合成的声音, 不是录音文件。点琴键发声, 或播放演示旋律《小星星》。</p><div class="row">${NOTES.map(n=>`<button class="btn" data-n="${n[1]}" style="height:90px;min-width:46px">${n[0]}</button>`).join('')}</div><div class="row" style="margin-top:10px"><button class="btn primary" data-a="play">▶ 播放《小星星》</button><button class="btn" data-a="stop">停止</button></div>`;
+  body.innerHTML=`<p class="muted">WebAudio 实时合成的声音, 不是录音文件。点琴键发声, 或播放演示旋律《小星星》。</p><div class="row">${NOTES.map(n=>`<button class="btn" data-n="${n[1]}" style="height:90px;min-width:46px">${n[0]}</button>`).join('')}</div><div class="row" style="margin-top:10px"><select data-a="song"><option value="0">《小星星》</option><option value="1">《欢乐颂》</option><option value="2">《卡农》片段</option></select><button class="btn primary" data-a="play">▶ 播放</button><button class="btn" data-a="stop">停止</button></div>`;
   let timers:any[]=[]; const tone=(f:number,at=0,dur=0.35)=>{ try{ ctxA=ctxA||new AudioContext(); const o=ctxA.createOscillator(); const g=ctxA.createGain(); o.type='triangle'; o.frequency.value=f; g.gain.setValueAtTime(0.22,ctxA.currentTime+at); g.gain.exponentialRampToValueAtTime(0.001,ctxA.currentTime+at+dur); o.connect(g); g.connect(ctxA.destination); o.start(ctxA.currentTime+at); o.stop(ctxA.currentTime+at+dur+0.05); }catch{} };
   body.querySelectorAll('[data-n]').forEach(b=>b.addEventListener('click',()=>tone(parseFloat((b as HTMLElement).dataset.n!))));
-  body.querySelector('[data-a="play"]')!.addEventListener('click',()=>{ const melody:[string,number][]=[['C4',1],['C4',1],['G4',1],['G4',1],['A4',1],['A4',1],['G4',2],['F4',1],['F4',1],['E4',1],['E4',1],['D4',1],['D4',1],['C4',2]]; let t=0; for(const [n,b] of melody){ const f=NOTES.find(x=>x[0]===n)![1]; const id=setTimeout(()=>tone(f,0,b*0.32),t*320); timers.push(id); t+=b; } });
+  body.querySelector('[data-a="play"]')!.addEventListener('click',()=>{ const SONGS:[string,number][][]=[[['C4',1],['C4',1],['G4',1],['G4',1],['A4',1],['A4',1],['G4',2],['F4',1],['F4',1],['E4',1],['E4',1],['D4',1],['D4',1],['C4',2]],[['E4',1],['E4',1],['F4',1],['G4',1],['G4',1],['F4',1],['E4',1],['D4',1],['C4',1],['C4',1],['D4',1],['E4',1],['E4',1.5],['D4',0.5],['D4',2]],[['E4',1],['D4',1],['C4',1],['B4',1],['A4',1],['G4',1],['A4',1],['B4',1]]]; const melody=SONGS[parseInt((body.querySelector('[data-a="song"]') as HTMLSelectElement).value)]; timers.forEach(clearTimeout); timers=[]; let t=0; for(const [n,b] of melody){ const f=NOTES.find(x=>x[0]===n)![1]; const id=setTimeout(()=>tone(f,0,b*0.32),t*320); timers.push(id); t+=b; } });
   body.querySelector('[data-a="stop"]')!.addEventListener('click',()=>{ timers.forEach(clearTimeout); timers=[]; });
 }
 function renderSnake(body:HTMLElement){
   const N=15, CELL=20; let snake=[{x:7,y:7}], dir={x:1,y:0}, food={x:11,y:7}, score=0, iv:any=null, dead=false;
-  body.innerHTML=`<div class="row"><button class="btn primary" data-a="start">开始 / 重新开始</button><span>得分: <b data-a="score">0</b></span><span class="muted">方向键 / WASD / 触控按钮</span></div><canvas data-a="cv" width="300" height="300" style="background:#0f172a;border-radius:10px;margin-top:8px;max-width:100%"></canvas><div class="row" style="justify-content:center;margin-top:6px"><button class="btn" data-d="0,-1">↑</button></div><div class="row" style="justify-content:center"><button class="btn" data-d="-1,0">←</button><button class="btn" data-d="0,1">↓</button><button class="btn" data-d="1,0">→</button></div>`;
+  body.innerHTML=`<div class="row"><button class="btn primary" data-a="start">开始 / 重新开始</button><span>得分: <b data-a="score">0</b></span><span class="muted">最高: <b data-a="best">${localStorage.getItem('webos-snake-best')||'0'}</b></span><select data-a="speed"><option value="200">慢</option><option value="140" selected>标准</option><option value="90">快</option></select><span class="muted">方向键 / WASD / 触控按钮</span></div><canvas data-a="cv" width="300" height="300" style="background:#0f172a;border-radius:10px;margin-top:8px;max-width:100%"></canvas><div class="row" style="justify-content:center;margin-top:6px"><button class="btn" data-d="0,-1">↑</button></div><div class="row" style="justify-content:center"><button class="btn" data-d="-1,0">←</button><button class="btn" data-d="0,1">↓</button><button class="btn" data-d="1,0">→</button></div>`;
   const cv=body.querySelector('[data-a="cv"]') as HTMLCanvasElement; const g=cv.getContext('2d')!;
   const draw=()=>{ g.fillStyle='#0f172a'; g.fillRect(0,0,300,300); g.fillStyle='#f43f5e'; g.fillRect(food.x*CELL+2,food.y*CELL+2,CELL-4,CELL-4); snake.forEach((s,i)=>{ g.fillStyle=i===0?'#4ade80':'#22c55e'; g.fillRect(s.x*CELL+1,s.y*CELL+1,CELL-2,CELL-2); }); if(dead){ g.fillStyle='#fff'; g.font='20px sans-serif'; g.fillText('游戏结束! 得分 '+score,70,150); } };
-  const step=()=>{ const head={x:snake[0].x+dir.x, y:snake[0].y+dir.y}; if(head.x<0||head.y<0||head.x>=N||head.y>=N||snake.some(s=>s.x===head.x&&s.y===head.y)){ dead=true; if(iv) clearInterval(iv); draw(); return; } snake.unshift(head); if(head.x===food.x&&head.y===food.y){ score+=10; (body.querySelector('[data-a="score"]')!).textContent=String(score); do{ food={x:Math.floor(Math.random()*N),y:Math.floor(Math.random()*N)}; }while(snake.some(s=>s.x===food.x&&s.y===food.y)); } else snake.pop(); draw(); };
-  body.querySelector('[data-a="start"]')!.addEventListener('click',()=>{ snake=[{x:7,y:7}]; dir={x:1,y:0}; score=0; dead=false; (body.querySelector('[data-a="score"]')!).textContent='0'; if(iv) clearInterval(iv); iv=setInterval(step,140); draw(); cv.focus(); });
+  const step=()=>{ const head={x:snake[0].x+dir.x, y:snake[0].y+dir.y}; if(head.x<0||head.y<0||head.x>=N||head.y>=N||snake.some(s=>s.x===head.x&&s.y===head.y)){ dead=true; if(iv) clearInterval(iv); const best=parseInt(localStorage.getItem('webos-snake-best')||'0'); if(score>best){ localStorage.setItem('webos-snake-best',String(score)); const be=body.querySelector('[data-a="best"]'); if(be) be.textContent=String(score); } draw(); return; } snake.unshift(head); if(head.x===food.x&&head.y===food.y){ score+=10; (body.querySelector('[data-a="score"]')!).textContent=String(score); do{ food={x:Math.floor(Math.random()*N),y:Math.floor(Math.random()*N)}; }while(snake.some(s=>s.x===food.x&&s.y===food.y)); } else snake.pop(); draw(); };
+  body.querySelector('[data-a="start"]')!.addEventListener('click',()=>{ snake=[{x:7,y:7}]; dir={x:1,y:0}; score=0; dead=false; (body.querySelector('[data-a="score"]')!).textContent='0'; if(iv) clearInterval(iv); iv=setInterval(step, parseInt((body.querySelector('[data-a="speed"]') as HTMLSelectElement).value)); draw(); cv.focus(); });
   body.querySelectorAll('[data-d]').forEach(b=>b.addEventListener('click',()=>{ const [x,y]=(b as HTMLElement).dataset.d!.split(',').map(Number); if(!(dir.x===-x&&dir.y===-y)) dir={x,y}; }));
   cv.tabIndex=0; cv.addEventListener('keydown',(e)=>{ const map:Record<string,[number,number]>={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]}; const m=map[e.key]; if(m){ e.preventDefault(); if(!(dir.x===-m[0]&&dir.y===-m[1])) dir={x:m[0],y:m[1]}; } });
   draw();
 }
+function renderPhotos(body:HTMLElement){
+  let cur=settings.wallpaper;
+  const grad=(w:any)=> w.url? `url(${w.url}) center/cover` : w.cls==='wp-moss'?'linear-gradient(160deg,#1d3b2a,#65a30d)':w.cls==='wp-sunset'?'linear-gradient(160deg,#7c2d12,#db2777)':w.cls==='wp-forest'?'linear-gradient(160deg,#14532d,#16a34a)':w.cls==='wp-slate'?'linear-gradient(160deg,#0f172a,#334155)':w.cls==='wp-rose'?'linear-gradient(160deg,#881337,#e11d48)':w.cls==='wp-violet'?'linear-gradient(160deg,#2e1065,#7c3aed)':w.cls==='wp-teal'?'linear-gradient(160deg,#042f2e,#0d9488)':'linear-gradient(160deg,#1e3a8a,#2563eb)';
+  const draw=()=>{ const w=WALLPAPERS.find(x=>x.id===cur)||WALLPAPERS[0];
+    body.innerHTML=`<div class="ph-view" style="background:${grad(w)}"><span>${w.name}</span></div><div class="row" style="margin:8px 0"><b>${w.name}</b><span class="muted">${settings.wallpaper===w.id?'当前壁纸':' '}</span><span style="flex:1"></span><button class="btn primary" data-a="setwp">设为壁纸</button></div><div class="ph-grid">${WALLPAPERS.map(x=>`<button class="ph-tile ${x.id===cur?'on':''}" data-w="${x.id}" style="background:${grad(x)}"><span>${x.name}</span></button>`).join('')}</div>`;
+    body.querySelectorAll('[data-w]').forEach(b=>b.addEventListener('click',()=>{ cur=(b as HTMLElement).dataset.w!; draw(); }));
+    body.querySelector('[data-a="setwp"]')!.addEventListener('click',()=>{ settings.wallpaper=cur; applyTheme(); persist(); draw(); toast('壁纸已设置'); });
+  }; draw();
+}
+function renderReader(body:HTMLElement,ctx:any){
+  let path=ctx.arg?.path||''; let fs2=17;
+  const draw=()=>{ const files=vfs.search('').filter(n=>n.type==='file'); let content='<p class="muted">从左侧选择一个文件开始阅读。支持 .md 的简易排版渲染。</p>'; let title='阅读器';
+    if(path){ try{ const raw=vfs.readFile(path); title=path.split('/').pop()||path; content=path.endsWith('.md')? renderMarkdown(raw) : `<pre class="rd-pre">${esc(raw)}</pre>`; }catch(e:any){ content='<p>'+esc(e.message)+'</p>'; } }
+    body.innerHTML=`<div class="ed-wrap"><aside class="ed-side"><b>文件</b><ul class="list" style="margin-top:8px">${files.map(n=>`<li style="padding:2px"><button class="btn ed-file" data-f="${esc(vfs.pathOf(n))}">${esc(vfs.pathOf(n).replace('/home/user/','~/'))}</button></li>`).join('')||'<li class="muted">暂无文件</li>'}</ul></aside><div class="ed-main"><div class="row"><b style="flex:1">${esc(title)}</b><button class="btn" data-a="dec">A−</button><button class="btn" data-a="inc">A＋</button></div><div class="rd-body" style="font-size:${fs2}px">${content}</div></div></div>`;
+    body.querySelectorAll('[data-f]').forEach(b=>b.addEventListener('click',()=>{ path=(b as HTMLElement).dataset.f!; draw(); }));
+    body.querySelector('[data-a="dec"]')!.addEventListener('click',()=>{ fs2=Math.max(13,fs2-2); draw(); });
+    body.querySelector('[data-a="inc"]')!.addEventListener('click',()=>{ fs2=Math.min(26,fs2+2); draw(); });
+  }; draw();
+}
+function renderTyping(body:HTMLElement){
+  const TEXTS=['The quick brown fox jumps over the lazy dog.','学而不思则罔, 思而不学则殆。','WebOS 让浏览器变成一台完整的电脑。','Practice makes perfect, keep typing every day.','宝船夜航, 长乐未央, 灯火照亮了整条江。'];
+  let idx=Math.floor(Math.random()*TEXTS.length); let start=0;
+  const draw=()=>{ const target=TEXTS[idx];
+    body.innerHTML=`<p class="muted">照着下面的句子输入, 实时统计速度与准确率。</p><div class="ty-target">${esc(target)}</div><textarea data-a="inp" placeholder="点这里开始输入…" style="height:90px;margin-top:10px"></textarea><div class="row" style="margin-top:8px"><span>速度 <b data-a="wpm">0</b> 字/分</span><span>准确率 <b data-a="acc">100%</b></span><span data-a="done" class="muted"></span><span style="flex:1"></span><button class="btn" data-a="next">换一句</button></div>`;
+    const inp=body.querySelector('[data-a="inp"]') as HTMLTextAreaElement; start=0;
+    inp.addEventListener('input',()=>{ const v=inp.value; if(!start&&v) start=Date.now(); let ok=0; for(let i=0;i<Math.min(v.length,target.length);i++) if(v[i]===target[i]) ok++;
+      const mins=start? (Date.now()-start)/60000 : 0; (body.querySelector('[data-a="wpm"]')!).textContent=mins>0? String(Math.round(v.length/mins)) : '0';
+      (body.querySelector('[data-a="acc"]')!).textContent=(v.length? Math.round(ok/v.length*100):100)+'%';
+      (body.querySelector('[data-a="done"]')!).textContent= v===target? '🎉 完成! 用时 '+Math.round((Date.now()-start)/1000)+' 秒' : (v.length>target.length? '输入超长了':''); });
+    body.querySelector('[data-a="next"]')!.addEventListener('click',()=>{ idx=(idx+1)%TEXTS.length; draw(); });
+    inp.focus();
+  }; draw();
+}
+function renderConvert(body:HTMLElement){
+  const CATS:Record<string,{units:Record<string,number>; temp?:boolean}>={ '长度':{units:{'米':1,'千米':1000,'厘米':0.01,'毫米':0.001,'英里':1609.34,'英尺':0.3048}}, '重量':{units:{'克':1,'千克':1000,'斤':500,'吨':1e6,'磅':453.59}}, '温度':{units:{'摄氏度':0,'华氏度':0,'开尔文':0}, temp:true} };
+  let cat='长度';
+  const draw=()=>{ const units=Object.keys(CATS[cat].units);
+    body.innerHTML=`<div class="row">${Object.keys(CATS).map(c=>`<button class="btn" data-cat="${c}" ${c===cat?'style="border-color:var(--accent)"':''}>${c}</button>`).join('')}</div><div class="row" style="margin-top:12px"><input data-a="val" type="number" value="1" style="flex:1"><select data-a="from">${units.map(u=>`<option>${u}</option>`).join('')}</select><span>→</span><select data-a="to">${units.map((u,i)=>`<option ${i===1?'selected':''}>${u}</option>`).join('')}</select></div><p style="font-size:22px;margin-top:14px">结果: <b data-a="res"></b></p>`;
+    const calc=()=>{ const v=parseFloat((body.querySelector('[data-a="val"]') as HTMLInputElement).value)||0; const f=(body.querySelector('[data-a="from"]') as HTMLSelectElement).value; const to=(body.querySelector('[data-a="to"]') as HTMLSelectElement).value; let r:number;
+      if(CATS[cat].temp){ const c= f==='摄氏度'? v : f==='华氏度'? (v-32)*5/9 : v-273.15; r= to==='摄氏度'? c : to==='华氏度'? c*9/5+32 : c+273.15; }
+      else r=v*CATS[cat].units[f]/CATS[cat].units[to];
+      (body.querySelector('[data-a="res"]')!).textContent=(Math.round(r*10000)/10000)+' '+to; };
+    body.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',calc)); calc();
+    body.querySelectorAll('[data-cat]').forEach(b=>b.addEventListener('click',()=>{ cat=(b as HTMLElement).dataset.cat!; draw(); }));
+  }; draw();
+}
 function renderWebSearch(body:HTMLElement){
-  const SITES:Record<string,{t:string;d:string}>={ 'news.webos':{t:'WebOS 每日资讯',d:'模拟新闻站: 本地新闻、科技与生活资讯 (模拟内容)。'}, 'wiki.webos':{t:'WebOS 百科',d:'模拟百科: 收录 WebOS 系统与应用的词条 (模拟内容)。'}, 'video.webos':{t:'WebOS 视频',d:'模拟视频站: 演示与教程视频列表 (模拟内容, 不能播放)。'}, 'shop.webos':{t:'WebOS 商店',d:'模拟商店: 主题、壁纸与小工具 (模拟内容, 不能购买)。'} };
+  const SITES:Record<string,{t:string;d:string}>={ 'news.webos':{t:'WebOS 每日资讯',d:'模拟新闻站: 本地新闻、科技与生活资讯 (模拟内容)。'}, 'wiki.webos':{t:'WebOS 百科',d:'模拟百科: 收录 WebOS 系统与应用的词条 (模拟内容)。'}, 'video.webos':{t:'WebOS 视频',d:'模拟视频站: 演示与教程视频列表 (模拟内容, 不能播放)。'}, 'shop.webos':{t:'WebOS 商店',d:'模拟商店: 主题、壁纸与小工具 (模拟内容, 不能购买)。'},
+   'webosintro.webos':{t:'WebOS 介绍',d:'www.webosintro.webos — 认识 WebOS: 特性、设计与版本历程。'},
+   'weboshelp.webos':{t:'WebOS 帮助中心',d:'www.weboshelp.webos — 常见问题与使用指南。'},
+   'webosapps.webos':{t:'WebOS 应用目录',d:'www.webosapps.webos — 全部应用一览, 可直接打开。'},
+   'webosdev.webos':{t:'WebOS 开发者',d:'www.webosdev.webos — 终端命令与开发说明。'} };
+  const link=(u:string,label:string)=>`<button data-site="${u}" class="ws-link">${label}</button>`;
+  const PAGES:Record<string,()=>string>={
+   'webosintro.webos':()=>`<h2>欢迎来到 WebOS</h2><p>WebOS 是一个运行在浏览器里的虚拟操作系统: 桌面、窗口、虚拟文件系统与应用全在本地运行, 不需要服务器。</p><h3>核心特性</h3><p>· 极光玻璃设计语言 + 苔光花园壁纸</p><p>· macOS 式布局: 红绿灯窗口、访达式文件、双栏设置</p><p>· 桌面即储存位置: 存到桌面的文件直接出现在桌面上</p><p>· 虚拟硬件与版本管理: 硬件可调, 版本可回退/升级</p><h3>接下来去哪</h3><p>${link('weboshelp.webos','打开帮助中心')} · ${link('webosapps.webos','浏览应用目录')} · ${link('webosdev.webos','开发者文档')}</p>`,
+   'weboshelp.webos':()=>`<h2>帮助中心</h2><details open><summary>文件存在哪里?</summary><p>文件保存在虚拟文件系统里。「桌面」是一个真实文件夹: 在编辑器保存时选「桌面」, 文件就会出现在桌面上。</p></details><details><summary>怎么卸载应用?</summary><p>长按桌面图标选「卸载」, 或在应用中心里卸载; 文件、设置、应用中心为系统应用不可卸载。</p></details><details><summary>长按多久触发菜单?</summary><p>0.32 秒, 比浏览器默认的长按判定更快。</p></details><details><summary>数据会上传吗?</summary><p>不会。所有数据只保存在本机浏览器 (IndexedDB/localStorage)。</p></details><details><summary>怎么格式化或注销?</summary><p>设置 → 维护: 注销只删账户; 格式化会全清并恢复出厂。</p></details><p>${link('webosintro.webos','回到介绍页')}</p>`,
+   'webosapps.webos':()=>`<h2>应用目录</h2><p>共 ${APPS.length} 款应用, 点击可直接打开 (模拟站点与系统联动演示)。</p><div class="ws-apps">${APPS.map(a=>`<button data-openapp="${a.id}"><span>${a.icon}</span><b>${a.name}</b><small>${esc(a.desc)}</small></button>`).join('')}</div>`,
+   'webosdev.webos':()=>`<h2>开发者文档</h2><p>终端与文件系统共享同一虚拟文件系统。常用命令:</p><p><code>ls</code> 列出 · <code>cd</code> 切换目录 · <code>cat</code> 查看文件 · <code>mkdir</code> 新建文件夹 · <code>echo 文本 &gt; 文件</code> 写文件 · <code>help 命令</code> 查看单个命令用法。</p><p>应用通过清单注册: id、名称、图标、版本与能力字段; 数据经 IndexedDB 快照持久化。</p><p>${link('weboshelp.webos','帮助中心')}</p>`,
+   'news.webos':()=>`<h2>WebOS 每日资讯</h2><p>· 头条: WebOS 1.6 发布, 模拟站点全面扩充。</p><p>· 科技: 极光玻璃成为默认设计语言。</p><p>· 生活: 苔光花园当选默认壁纸。</p><p class="muted">以上均为模拟新闻。</p>`,
+   'wiki.webos':()=>`<h2>WebOS 百科</h2><p><b>WebOS</b>: 浏览器虚拟操作系统, 首版于 2026-10-29 交付。</p><p><b>极光玻璃</b>: WebOS 的默认设计语言, 以毛玻璃与极光渐变为主。</p><p><b>苔光花园</b>: 默认壁纸, 自然绿色渐变。</p>`,
+   'video.webos':()=>`<h2>WebOS 视频</h2><p>· 《WebOS 十分钟上手》 (模拟视频, 不能播放)</p><p>· 《桌面储存小技巧》 (模拟视频)</p><p>· 《版本管理演示》 (模拟视频)</p>`,
+   'shop.webos':()=>`<h2>WebOS 商店</h2><p>· 极光玻璃主题包 — 已内置</p><p>· 苔光花园壁纸 — 已内置</p><p>· 开发者工具包 — 见开发者站</p><p class="muted">模拟商店, 不能真实购买。</p><p>${link('webosapps.webos','去应用目录')}</p>`
+  };
   let hist:string[]=['home']; let hi=0;
   const fakeResults=(q:string)=>{ const seeds=['入门指南','完整教程','常见问题解答','最新动态','深度评测','官方文档','社区讨论']; return seeds.slice(0,5).map((s,i)=>({ title:`${q} · ${s}`, url:`${['docs','wiki','news','help','blog'][i]}.webos/${encodeURIComponent(q)}-${i+1}`, snip:`这是关于「${q}」的模拟搜索结果第 ${i+1} 条。本浏览器为模拟浏览器, 不连接真实互联网, 内容由本地模板生成。` })); };
   const page=(url:string):string=>{
     if(url==='home') return `<div class="ws-home"><div class="ws-logo">Web<span>Search</span></div><form data-a="sform" class="ws-sbox"><input data-a="q" placeholder="搜索模拟网络…" aria-label="搜索"><button class="btn primary">搜索</button></form><div class="ws-sites">${Object.entries(SITES).map(([u,s])=>`<button data-site="${u}"><b>${s.t}</b><small>${u}</small></button>`).join('')}</div><p class="muted">模拟浏览器 · 不联网 · 结果与站点均为本地模拟内容</p></div>`;
+    if(PAGES[url]) return `<div class="ws-page"><span class="ws-badge">模拟站点</span>${PAGES[url]()}</div>`;
     const site=SITES[url];
-    if(site) return `<div class="ws-page"><span class="ws-badge">模拟站点</span><h2>${site.t}</h2><p class="muted">${url}</p><p>${site.d}</p><p>· 头条: WebOS 1.5 带来 macOS 式布局与模拟浏览器。</p><p>· 推荐: 在「桌面」位置储存文件, 打开文件即可在桌面找到它。</p><p>· 提示: 本站所有内容均为模拟, 不代表真实信息。</p></div>`;
+    if(site) return `<div class="ws-page"><span class="ws-badge">模拟站点</span><h2>${site.t}</h2><p class="muted">${url}</p><p>${site.d}</p></div>`;
     if(url.startsWith('search:')){ const q=url.slice(7); const rs=fakeResults(q); return `<div class="ws-results"><p class="muted">关于「${esc(q)}」的模拟结果 (约 ${rs.length*137} 条, 本地生成)</p>${rs.map(r=>`<div class="ws-r"><button data-open="${esc(r.url)}" class="ws-rt">${esc(r.title)}</button><div class="ws-url">${esc(r.url)}</div><p>${esc(r.snip)}</p></div>`).join('')}</div>`; }
     return `<div class="ws-page"><span class="ws-badge">模拟页面</span><h2>${esc(url)}</h2><p>这是一个模拟页面。本浏览器不会请求真实网站, 地址栏中的内容仅在本机模拟打开。</p><p>你可以通过搜索或访问 .webos 模拟站点来浏览演示内容。</p></div>`;
   };
@@ -374,17 +453,18 @@ function renderWebSearch(body:HTMLElement){
     body.querySelector('[data-a="back"]')!.addEventListener('click',()=>{ if(hi>0){ hi--; draw(); } });
     body.querySelector('[data-a="fwd"]')!.addEventListener('click',()=>{ if(hi<hist.length-1){ hi++; draw(); } });
     body.querySelector('[data-a="home"]')!.addEventListener('click',()=>go('home'));
-    body.querySelector('[data-a="aform"]')!.addEventListener('submit',(e)=>{ e.preventDefault(); const v=(body.querySelector('[data-a="addr"]') as HTMLInputElement).value.trim().replace(/^websearch:\/\//,''); if(!v) return; if(SITES[v]||v==='home') go(v); else if(v.includes('.')) go(v); else go('search:'+v); });
+    body.querySelector('[data-a="aform"]')!.addEventListener('submit',(e)=>{ e.preventDefault(); const v=(body.querySelector('[data-a="addr"]') as HTMLInputElement).value.trim().replace(/^websearch:\/\//,'').replace(/^www\./,''); if(!v) return; if(SITES[v]||v==='home') go(v); else if(v.includes('.')) go(v); else go('search:'+v); });
     const sf=body.querySelector('[data-a="sform"]'); if(sf) sf.addEventListener('submit',(e)=>{ e.preventDefault(); const q=(body.querySelector('[data-a="q"]') as HTMLInputElement).value.trim(); if(q) go('search:'+q); });
     body.querySelectorAll('[data-site]').forEach(b=>b.addEventListener('click',()=>go((b as HTMLElement).dataset.site!)));
     body.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>go((b as HTMLElement).dataset.open!)));
+    body.querySelectorAll('[data-openapp]').forEach(b=>b.addEventListener('click',()=>openApp((b as HTMLElement).dataset.openapp!)));
   }; draw();
 }
 function renderWeather(body:HTMLElement){
   const CITIES=['北京','上海','广州','深圳','成都'];
   const draw=(city:string)=>{ const seedBase=city.split('').reduce((a,c)=>a+c.charCodeAt(0),0); const day=Math.floor(Date.now()/86400000); const conds=['晴','多云','晴','阴','小雨','多云','晴间多云']; const mk=(off:number)=>{ const s=seedBase+day+off*7; const cond=conds[Math.abs(s)%conds.length]; const hi=18+Math.abs(s*3)%14; const lo=hi-6-Math.abs(s)%4; return {cond,hi,lo}; };
     const today=mk(0); const days=['今天','明天','后天','第4天','第5天'].map((d,i)=>({d,...mk(i)}));
-    body.innerHTML=`<div class="row">${CITIES.map(c=>`<button class="btn" data-city="${c}" ${c===city?'style="border-color:var(--accent)"':''}>${c}</button>`).join('')}</div><div style="text-align:center;padding:16px 0"><div style="font-size:44px">${today.cond==='小雨'?'🌧️':today.cond==='阴'?'☁️':today.cond==='多云'||today.cond==='晴间多云'?'⛅':'☀️'}</div><b style="font-size:22px">${city} · ${today.cond}</b><p style="font-size:30px;margin:6px">${today.lo}° ~ ${today.hi}°</p></div><ul class="list">${days.map(x=>`<li><span style="flex:1">${x.d}</span><span>${x.cond}</span><b>${x.lo}° ~ ${x.hi}°</b></li>`).join('')}</ul><p class="muted">演示数据: 由日期在本地生成的模拟天气, 未连接任何天气服务, 请勿据此安排出行。</p>`;
+    body.innerHTML=`<div class="row">${CITIES.map(c=>`<button class="btn" data-city="${c}" ${c===city?'style="border-color:var(--accent)"':''}>${c}</button>`).join('')}</div><div style="text-align:center;padding:16px 0"><div style="font-size:44px">${today.cond==='小雨'?'🌧️':today.cond==='阴'?'☁️':today.cond==='多云'||today.cond==='晴间多云'?'⛅':'☀️'}</div><b style="font-size:22px">${city} · ${today.cond}</b><p style="font-size:30px;margin:6px">${today.lo}° ~ ${today.hi}°</p></div><ul class="list">${days.map(x=>`<li><span style="flex:1">${x.d}</span><span>${x.cond}</span><b>${x.lo}° ~ ${x.hi}°</b></li>`).join('')}</ul><h4 style="margin:12px 0 6px">逐小时 (模拟)</h4><div class="wx-hours">${[0,3,6,9,12,15,18,21].map(h=>{ const hh=mk(0); const temp=hh.lo+Math.round((hh.hi-hh.lo)*(h===12?1:h/24)); return `<div class="wx-h"><span>${h}:00</span><b>${temp}°</b><small>${hh.cond}</small></div>`; }).join('')}</div><p class="muted">演示数据: 由日期在本地生成的模拟天气, 未连接任何天气服务, 请勿据此安排出行。</p>`;
     body.querySelectorAll('[data-city]').forEach(b=>b.addEventListener('click',()=>draw((b as HTMLElement).dataset.city!))); };
   draw('北京');
 }
@@ -480,4 +560,4 @@ function showLauncher(){ document.querySelectorAll('.launcher,.searchbox').forEa
 function showSearch(){ document.querySelectorAll('.launcher,.searchbox').forEach(e=>e.remove()); const d=document.createElement('div'); d.className='searchbox'; d.innerHTML=`<input placeholder="搜索应用、文件、便笺..." autofocus><ul class="list" style="margin-top:10px"></ul>`; $('.desktop')!.appendChild(d); const inp=d.querySelector('input')!; const list=d.querySelector('.list')!;
   inp.addEventListener('input',()=>{ const q=(inp as HTMLInputElement).value.trim(); if(!q){list.innerHTML='';return;} const apps=APPS.filter(a=>a.name.includes(q)).map(a=>`<li>应用：${esc(a.name)} <button class="btn" data-open="${a.id}">打开</button></li>`); const files=vfs.search(q).slice(0,8).map(n=>`<li>文件：${esc(vfs.pathOf(n))}</li>`); const ns=notes.filter(n=>n.title.includes(q)||n.body.includes(q)).map(n=>`<li>便笺：${esc(n.title)}</li>`); list.innerHTML=[...apps,...files,...ns].join('')||'<li>无结果</li>'; list.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>{ d.remove(); openApp((b as HTMLElement).dataset.open!); })); }); inp.focus(); }
 
-(async()=>{ showBoot(); await restore(); try{ if(installed.has('websearch') && !desk.items.some(i=>i.kind==='app'&&i.ref==='websearch')){ const na=APPS.find(a=>a.id==='websearch'); if(na){ desk.items=[...desk.items, appItem(na)]; saveDesk(); } } }catch{} try{ if(!vfs.resolve('/home/user/Desktop')){ vfs.mkdir('/home/user/Desktop'); persist(); } }catch{} shell(); notify('WebOS 已启动'); if('serviceWorker' in navigator){ try{ await navigator.serviceWorker.register('./sw.js'); }catch{} } setTimeout(()=>{ const b=document.querySelector('.boot'); if(b){ b.classList.add('hide'); setTimeout(()=>b.remove(),500); } if(!isLoggedIn()) showLogin(); },1650); })();
+(async()=>{ showBoot(); await restore(); try{ let added=false; for(const a of APPS){ if(installed.has(a.id) && !desk.items.some(i=>i.kind==='app'&&i.ref===a.id)){ desk.items=[...desk.items, appItem(a)]; added=true; } } if(added) saveDesk(); }catch{} try{ if(!vfs.resolve('/home/user/Desktop')){ vfs.mkdir('/home/user/Desktop'); persist(); } }catch{} shell(); notify('WebOS 已启动'); if('serviceWorker' in navigator){ try{ await navigator.serviceWorker.register('./sw.js'); }catch{} } setTimeout(()=>{ const b=document.querySelector('.boot'); if(b){ b.classList.add('hide'); setTimeout(()=>b.remove(),500); } if(!isLoggedIn()) showLogin(); },1650); })();
