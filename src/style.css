@@ -221,3 +221,13 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-
 .desktop.wp-aurora .deskicons,.desktop.wp-aurora .dock{z-index:2}
 @keyframes auroraFloat{from{transform:translate3d(-3%,-2%,0) rotate(-2deg) scale(1)}to{transform:translate3d(3%,3%,0) rotate(2.5deg) scale(1.08)}}
 @media (prefers-reduced-motion: reduce){ .desktop.wp-aurora::after{animation:none} }
+/* ===== WebOS 1.8: 动画深度优化 + 真实网页 ===== */
+.tile{transition:transform .18s cubic-bezier(.34,1.8,.5,1)}
+.dock button:active .tile,.deskicon:active .tile{transform:scale(.86)}
+.launcher .grid button{animation:popIn .28s cubic-bezier(.2,.9,.3,1.2) both}
+.launcher .grid button:nth-child(2){animation-delay:.03s}.launcher .grid button:nth-child(3){animation-delay:.06s}.launcher .grid button:nth-child(4){animation-delay:.09s}.launcher .grid button:nth-child(5){animation-delay:.12s}.launcher .grid button:nth-child(6){animation-delay:.15s}.launcher .grid button:nth-child(7){animation-delay:.18s}.launcher .grid button:nth-child(8){animation-delay:.21s}
+body.dragging .win,body.resizing .win{transition:none;box-shadow:0 10px 26px rgba(2,6,23,.28)}
+body.dragging .win header,body.resizing .win header{backdrop-filter:none}
+.deskicon{will-change:left,top}
+.ws-frame{width:100%;height:52vh;border:1px solid var(--border);border-radius:12px;background:#fff}
+input[type=range]{accent-color:var(--accent)}

@@ -21,3 +21,7 @@ export function removeAppItems(items:DeskItem[], appId:string):DeskItem[]{
   // app shortcuts have ref === appId (no leading slash); file shortcuts have ref starting with '/'
   return items.filter(i=>!((i.kind==='app'&&i.ref===appId)||(i.kind==='shortcut'&&i.ref===appId)));
 }
+
+export interface MagCfg{ on:boolean; max:number; range:number; sens:number; }
+export const DEFAULT_MAG:MagCfg={ on:true, max:1.35, range:100, sens:1 };
+export function magScale(dist:number, cfg:MagCfg):number{ if(!cfg.on) return 1; const k=Math.max(0, 1 - Math.abs(dist)/cfg.range); const curved=Math.pow(k, 2 - Math.min(1.5, Math.max(0.2, cfg.sens))*0.7); return 1 + (cfg.max-1)*curved; }
