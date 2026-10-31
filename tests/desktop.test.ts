@@ -13,7 +13,7 @@ describe('desktop items',()=>{
 });
 
 describe('dock magnification',()=>{
-  it('peaks at max under the pointer and falls to 1 at range edge',()=>{ expect(magScale(0,DEFAULT_MAG)).toBeCloseTo(1.35,2); expect(magScale(100,DEFAULT_MAG)).toBe(1); expect(magScale(240,DEFAULT_MAG)).toBe(1); });
+  it('peaks at max under the pointer and falls to 1 at range edge',()=>{ expect(magScale(0,DEFAULT_MAG)).toBeCloseTo(1.22,2); expect(magScale(56,DEFAULT_MAG)).toBe(1); expect(magScale(30,DEFAULT_MAG)).toBeLessThan(1.22); expect(magScale(240,DEFAULT_MAG)).toBe(1); });
   it('respects off switch and smaller max',()=>{ expect(magScale(0,{...DEFAULT_MAG,on:false})).toBe(1); expect(magScale(0,{...DEFAULT_MAG,max:1.15})).toBeCloseTo(1.15,2); });
   it('higher sensitivity widens the strong zone',()=>{ const lo=magScale(50,{...DEFAULT_MAG,sens:0.4}); const hi=magScale(50,{...DEFAULT_MAG,sens:1.6}); expect(hi).toBeGreaterThan(lo); });
 });

@@ -23,5 +23,5 @@ export function removeAppItems(items:DeskItem[], appId:string):DeskItem[]{
 }
 
 export interface MagCfg{ on:boolean; max:number; range:number; sens:number; }
-export const DEFAULT_MAG:MagCfg={ on:true, max:1.35, range:100, sens:1 };
+export const DEFAULT_MAG:MagCfg={ on:true, max:1.22, range:56, sens:1 };
 export function magScale(dist:number, cfg:MagCfg):number{ if(!cfg.on) return 1; const k=Math.max(0, 1 - Math.abs(dist)/cfg.range); const curved=Math.pow(k, 2 - Math.min(1.5, Math.max(0.2, cfg.sens))*0.7); return 1 + (cfg.max-1)*curved; }

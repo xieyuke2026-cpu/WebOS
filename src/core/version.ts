@@ -1,6 +1,7 @@
 export interface VerInfo{ v:string; date:string; notes:string; }
-export const LATEST_VERSION='1.8.0';
+export const LATEST_VERSION='1.9.0';
 export const VERSIONS:VerInfo[]=[
+ {v:'1.9.0', date:'2026-10-31', notes:'Dock 放大范围收敛到约一个图标、倍数再调小; 全站应用/文件图标改用统一线宽的 SVG 图标系统, 告别 emoji 图标。'},
  {v:'1.8.0', date:'2026-10-31', notes:'Dock 放大可调 (开关/倍数/范围/灵敏度) 且默认更收敛, 放大动画改平滑插值; 图标与拖动动画深度优化; WebSearch 允许打开真实网页 (iframe)。'},
  {v:'1.7.0', date:'2026-10-31', notes:'继续 mac 化: squircle 渐变图标、Dock 放大特效、顶栏菜单、Launchpad 启动器; 流畅性优化 (拖动帧同步/保存防抖/资源条定向更新); 新增极光玻璃动态壁纸。'},
  {v:'1.6.0', date:'2026-10-29', notes:'虚拟硬件可在设置中调节; 模拟站点扩充 (介绍/帮助/应用/开发者); 软件更新页支持版本日志、回退与升级; 新增相册、阅读器、打字练习、单位换算; 天气/音乐/贪吃蛇/便笺更新。'},
