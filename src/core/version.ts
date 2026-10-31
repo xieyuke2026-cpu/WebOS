@@ -1,6 +1,7 @@
 export interface VerInfo{ v:string; date:string; notes:string; }
-export const LATEST_VERSION='1.9.0';
+export const LATEST_VERSION='1.10.0';
 export const VERSIONS:VerInfo[]=[
+ {v:'1.10.0', date:'2026-10-31', notes:'应用中心改 macOS App Store 式布局 (分类侧栏/推荐大卡/获取按钮); 新增番茄钟、密码生成器、随机转盘、记账本、习惯打卡 5 款应用 (共 25 款)。'},
  {v:'1.9.0', date:'2026-10-31', notes:'Dock 放大范围收敛到约一个图标、倍数再调小; 全站应用/文件图标改用统一线宽的 SVG 图标系统, 告别 emoji 图标。'},
  {v:'1.8.0', date:'2026-10-31', notes:'Dock 放大可调 (开关/倍数/范围/灵敏度) 且默认更收敛, 放大动画改平滑插值; 图标与拖动动画深度优化; WebSearch 允许打开真实网页 (iframe)。'},
  {v:'1.7.0', date:'2026-10-31', notes:'继续 mac 化: squircle 渐变图标、Dock 放大特效、顶栏菜单、Launchpad 启动器; 流畅性优化 (拖动帧同步/保存防抖/资源条定向更新); 新增极光玻璃动态壁纸。'},
