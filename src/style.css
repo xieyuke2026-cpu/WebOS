@@ -197,3 +197,27 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-
 .wx-h small{color:var(--muted)}
 .veritem{border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin:8px 0}
 .veritem.on{border-color:var(--accent);background:rgba(37,99,235,.07)}
+/* ===== WebOS 1.7: squircle 图标 / 菜单栏 / Launchpad / 极光壁纸 / 流畅动画 ===== */
+.tile{display:inline-flex;align-items:center;justify-content:center;border-radius:24%;box-shadow:0 4px 10px rgba(0,0,0,.30),inset 0 1px 1px rgba(255,255,255,.55),inset 0 -2px 4px rgba(0,0,0,.15);flex:none;line-height:1}
+.dock .tile{width:46px;height:46px;font-size:24px}
+.dock button{transform-origin:50% 100%;will-change:transform}
+.dock.left button{transform-origin:0 50%}
+.deskicon .tile{width:54px;height:54px;font-size:27px}
+.deskicon .filetile{background:rgba(255,255,255,.28);box-shadow:0 4px 10px rgba(0,0,0,.25);font-size:26px}
+.win .tile,.list .tile{width:42px;height:42px;font-size:21px;margin-right:4px}
+.launcher .tile{width:58px;height:58px;font-size:29px}
+.mbmenus{display:flex;gap:2px;margin-left:6px}
+.mbmenus button{border:0;background:transparent;color:inherit;font:inherit;font-size:14px;padding:6px 10px;border-radius:8px;cursor:pointer;min-height:34px}
+.mbmenus button:hover{background:rgba(127,127,127,.22)}
+.launcher{width:min(680px,96vw);padding:18px}
+.lp-head{display:flex;gap:8px;margin-bottom:14px}
+.lp-head input{flex:1;border-radius:99px;padding-left:18px;min-height:44px;font-size:16px}
+.launcher .grid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:14px}
+.launcher .grid button{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 6px;font-size:14px}
+.win{transition:transform .25s cubic-bezier(.3,.7,.3,1),opacity .25s}
+.win.minimized{display:flex;opacity:0;transform:scale(.82) translateY(46px);pointer-events:none}
+.desktop.wp-aurora{background:linear-gradient(200deg,#070d24,#0e1e42 45%,#082f3a)}
+.desktop.wp-aurora::after{content:'';position:absolute;inset:-25%;background:radial-gradient(38% 52% at 24% 18%,rgba(52,255,190,.5),transparent 62%),radial-gradient(34% 48% at 68% 12%,rgba(168,85,247,.48),transparent 62%),radial-gradient(44% 58% at 54% 34%,rgba(59,130,246,.42),transparent 66%),radial-gradient(28% 40% at 86% 38%,rgba(236,72,153,.34),transparent 62%);filter:blur(30px);animation:auroraFloat 26s ease-in-out infinite alternate;pointer-events:none;z-index:0}
+.desktop.wp-aurora .deskicons,.desktop.wp-aurora .dock{z-index:2}
+@keyframes auroraFloat{from{transform:translate3d(-3%,-2%,0) rotate(-2deg) scale(1)}to{transform:translate3d(3%,3%,0) rotate(2.5deg) scale(1.08)}}
+@media (prefers-reduced-motion: reduce){ .desktop.wp-aurora::after{animation:none} }

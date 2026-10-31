@@ -1,6 +1,7 @@
 export interface VerInfo{ v:string; date:string; notes:string; }
-export const LATEST_VERSION='1.6.0';
+export const LATEST_VERSION='1.7.0';
 export const VERSIONS:VerInfo[]=[
+ {v:'1.7.0', date:'2026-10-31', notes:'继续 mac 化: squircle 渐变图标、Dock 放大特效、顶栏菜单、Launchpad 启动器; 流畅性优化 (拖动帧同步/保存防抖/资源条定向更新); 新增极光玻璃动态壁纸。'},
  {v:'1.6.0', date:'2026-10-29', notes:'虚拟硬件可在设置中调节; 模拟站点扩充 (介绍/帮助/应用/开发者); 软件更新页支持版本日志、回退与升级; 新增相册、阅读器、打字练习、单位换算; 天气/音乐/贪吃蛇/便笺更新。'},
  {v:'1.5.0', date:'2026-10-29', notes:'macOS 式布局 (红绿灯/菜单栏/设置双栏); 虚拟 CPU/GPU/内存/储存与任务管理器资源面板; 注销账户与格式化; 模拟浏览器 WebSearch。'},
  {v:'1.4.0', date:'2026-10-29', notes:'默认风格极光玻璃、默认壁纸苔光花园; 桌面成为储存位置; 访达式文件; macOS 式保存面板。'},
